@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>员工合理化建议智能预测系统</title>
+    <link type="text/css" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/materialize-css@1.0.0/dist/css/materialize.min.css">
+    <link type="text/css" rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f5f5f5; }
+        .navbar-main { background: linear-gradient(45deg, #26a69a, #00897b) !important; }
+        .brand-logo { font-size: 20px !important; font-weight: bold; }
+        .card-panel { border-radius: 10px; }
+        .collection-header { text-align: center; padding: 15px 20px !important; }
+        .collection-item { word-break: break-word; }
+        .collection .collection-item.avatar { min-height: 80px; }
+        .card { border-radius: 10px; }
+        .card-content { padding: 20px !important; }
+        .input-field > i { color: #26a69a !important; }
+        .prefix ~ input, .prefix ~ textarea { margin-left: 3rem; }
+        .section-title { font-size: 16px; font-weight: 600; color: #26a69a; margin-bottom: 10px; }
+        .form-card { background: white; border-radius: 10px; padding: 20px; margin-top: 20px; }
+        .chart-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
+        .chart-card { background: white; border-radius: 10px; padding: 16px; }
+        .chart-card canvas { width: 100% !important; height: 220px !important; }
+        .result-card { background: white; border-radius: 10px; padding: 20px; margin-top: 20px; }
+        .btn-submit { background: linear-gradient(45deg, #26a69a, #00897b) !important; }
+        .btn-action { background: #2196f3 !important; }
+        .empty-state { text-align: center; padding: 60px; color: #999; }
+        .loading { text-align: center; padding: 40px; }
+        .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #26a69a; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .error-msg { background: #ffebee; color: #c62828; padding: 15px; border-radius: 5px; margin-top: 15px; }
+        .success-msg { background: #e8f5e9; color: #2e7d32; padding: 15px; border-radius: 5px; margin-top: 15px; }
+        .similarity-badge { background: #26a69a; color: white; padding: 5px 15px; border-radius: 5px; font-weight: bold; }
+        .input-field { position: relative; }
+        .input-field .btn-floating { position: absolute; right: 10px; top: 10px; z-index: 10; }
+        .pulse { animation: pulse 1s infinite; }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        @media (max-width: 992px) {
+            .chart-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+        @media (max-width: 600px) {
+            .chart-grid { grid-template-columns: 1fr; }
+            .chart-card canvas { height: 200px !important; }
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <div class="navbar navbar-fixed">
+        <nav class="navbar-main navbar-color nav-collapsible sideNav-lock">
+            <div class="nav-wrapper">
+                <a class="brand-logo" href="#">
+                    <i class="material-icons">record_voice_over</i>
+                    <span style="padding-left:8px;">ESS智能助手</span>
+                </a>
+                <ul class="navbar-list right">
+                    <li><a href="#" onclick="switchTab('predict')" class="waves-effect waves-light"><i class="material-icons">psychology</i> 智能预测</a></li>
+                    <li><a href="#" onclick="switchTab('train')" class="waves-effect waves-light"><i class="material-icons">model_training</i> 模型训练</a></li>
+                    <li><a href="#" onclick="switchTab('stats')" class="waves-effect waves-light"><i class="material-icons">analytics</i> 数据统计</a></li>
+                </ul>
+            </div>
+        </nav>
+    </div>
+
+    <div class="row" style="margin-top: 70px;">
+        <!-- 左侧用户信息 -->
+        <div class="col s12 m12 l3 xl2 offset-xl1">
+            <div class="card-panel" style="padding:0px;">
+                <ul class="collection with-header">
+                    <li class="collection-header" style="text-align:center;word-break: break-word;padding:10px 20px;">
+                        <i class="material-icons large">account_circle</i>
+                        <div>
+                            <span class="new badge" style="margin-left:0px;float:none;background-color: #26a69a;" data-badge-caption="">智能助手</span>
+                        </div>
+                    </li>
+                    <li class="collection-item">
+                        <i class="material-icons left">business</i>
+                        部门: 生产区域
+                    </li>
+                    <li class="collection-item">
+                        <i class="material-icons left">category</i>
+                        建议类型: 上下文语义自动智能分配
+                    </li>
+                    <li class="collection-item">
+                        <i class="material-icons left">model_training</i>
+                        训练数据: 自动学习
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 右侧主要内容 -->
+        <div class="col s12 m12 l9 xl8">
+            <!-- 预测页面 -->
+            <div id="predict-page">
+                <div class="card">
+                    <div class="card-content">
+                        <div class="row">
+                            <div class="col s12">
+                                <div class="form-card">
+                                    <div class="section-title">
+                                        <i class="material-icons left">edit</i>输入建议信息
+                                    </div>
+                                    <form id="predictForm">
+                                        <div class="row">
+                                            <div class="input-field col s12">
+                                                <i class="material-icons prefix">badge</i>
+                                                <input id="gid" type="text" required>
+                                                <label for="gid">员工GID *</label>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="input-field col s12">
+                                                <i class="material-icons prefix">record_voice_over</i>
+                                                <textarea id="description" class="materialize-textarea" required></textarea>
+                                                <label for="description">问题描述 *(地点Where+对象What/人员Who+时间&频率When+原因分析Why)</label>
+                                                <button type="button" class="btn-floating btn-small red waves-effect waves-light" onclick="startSpeech('description')" style="position: absolute; right: 10px; top: 10px;" title="开始语音输入，再按一次结束">
+                                                    <i class="material-icons" id="mic-description">mic</i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="input-field col s12">
+                                                <i class="material-icons prefix">pan_tool</i>
+                                                <textarea id="suggestion" class="materialize-textarea" required></textarea>
+                                                <label for="suggestion">改善建议 *</label>
+                                                <button type="button" class="btn-floating btn-small red waves-effect waves-light" onclick="startSpeech('suggestion')" style="position: absolute; right: 10px; top: 10px;" title="开始语音输入，再按一次结束">
+                                                    <i class="material-icons" id="mic-suggestion">mic</i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col s12">
+                                                <div class="section-title" style="margin-bottom: 10px;">
+                                                    <i class="material-icons left">photo_library</i>上传图片 (最多3张)
+                                                </div>
+                                                <div class="file-field input-field">
+                                                    <div class="btn btn-action btn-small">
+                                                        <i class="material-icons">add_photo_alternate</i>
+                                                        <input type="file" id="imageUpload" accept="image/*" multiple onchange="handleImageUpload(this)">
+                                                    </div>
+                                                    <div class="file-path-wrapper">
+                                                        <input class="file-path validate" type="text" placeholder="选择图片">
+                                                    </div>
+                                                </div>
+                                                <div id="imagePreview" style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px;"></div>
+                                                <input type="hidden" id="imageData" value="">
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col s12">
+                                                <button type="submit" class="btn btn-submit waves-effect waves-light">
+                                                    <i class="material-icons left">psychology</i>开始推荐
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row" id="result-section" style="display:none;">
+                            <div class="col s12">
+                                <div class="result-card">
+                                    <div class="section-title">
+                                        <i class="material-icons left">assessment</i>推荐结果
+                                        <span class="similarity-badge right" id="similarity-badge">匹配度: 0%</span>
+                                    </div>
+                                    <div id="predictResult"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 模型训练页面 -->
+            <div id="train-page" style="display:none;">
+                <div class="card">
+                    <div class="card-content">
+                        <div class="section-title">
+                            <i class="material-icons left">model_training</i>模型训练
+                        </div>
+                        <div class="form-card">
+                            <p style="margin-bottom: 20px;">
+                                <i class="material-icons left orange-text">info</i>
+                                点击下方按钮从桌面读取Excel文件，重新训练模型
+                            </p>
+                            <div class="row">
+                                <div class="col s12">
+                                    <div class="input-field col s12">
+                                        <i class="material-icons prefix">folder</i>
+                                        <input disabled value="C:\Users\364328\Desktop\2025 ESS simple.xlsx" type="text">
+                                        <label>数据文件路径</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col s12">
+                                    <button onclick="trainModel()" class="btn btn-action waves-effect waves-light">
+                                        <i class="material-icons left">refresh</i>读取数据并训练模型
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="trainResult"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 统计页面 -->
+            <div id="stats-page" style="display:none;">
+                <div class="card">
+                    <div class="card-content">
+                        <div class="section-title">
+                            <i class="material-icons left">analytics</i>数据统计
+                        </div>
+                        <div id="statsContent"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右下角固定按钮 -->
+    <div class="fixed-action-btn" id="action-buttons" style="bottom: 30px; right: 30px; display: none;">
+        <a class="btn-floating btn-large red" href="#">
+            <i class="large material-icons">more_horiz</i>
+        </a>
+        <ul>
+            <li>
+                <a class="btn-floating red darken-1 btn-large" onclick="closeForm()" title="关闭">
+                    <i class="material-icons">close</i>
+                </a>
+            </li>
+            <li>
+                <a class="btn-floating blue btn-large" onclick="saveForm()" title="保存">
+                    <i class="material-icons">save</i>
+                </a>
+            </li>
+            <li>
+                <a class="btn-floating green btn-large" onclick="submitForm()" title="提交">
+                    <i class="material-icons">send</i>
+                </a>
+            </li>
+        </ul>
+    </div>
+
+    <div id="lowMatchModal" class="modal">
+        <div class="modal-content">
+            <h5>请确认输入信息</h5>
+            <p id="lowMatchModalText">当前匹配度较低，请员工确认输入的信息是否准确完整后再继续。</p>
+        </div>
+        <div class="modal-footer">
+            <a href="#!" class="modal-close waves-effect waves-green btn-flat">关闭</a>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/materialize-css@1.0.0/dist/js/materialize.min.js"></script>
+    <script>
+        const fieldLabels = {
+            'Title': '职位',
+            'Department': '部门',
+            'LaborType': '用工类型',
+            'Shift': '班次',
+            'UserAreaName': '用户所属区域',
+            'ProblemAreaName': '问题发生区域',
+            'LocationName': '线别&位置',
+            'ManagerGid': '主管GID',
+            'ManagerName': '主管姓名',
+            'ItemType': '建议类型',
+            'OwnerName': '责任人',
+            'OwnerGid': '责任人GID',
+            'OwnerTel': '责任人电话',
+            'OwnerManagerGid': '责任人主管GID',
+            'OwnerManagerName': '责任人主管',
+            'IsRepeat': '是否重复',
+            'AreaType': '区域类型'
+        };
+
+        let fieldOptions = {};
+
+        async function loadFieldOptions() {
+            try {
+                const response = await fetch('/api/field-options');
+                fieldOptions = await response.json();
+            } catch (e) {
+                console.error('Failed to load field options:', e);
+            }
+        }
+
+        loadFieldOptions();
+
+        let uploadedImages = [];
+
+        function handleImageUpload(input) {
+            const files = input.files;
+            const preview = document.getElementById('imagePreview');
+            
+            if (files.length + uploadedImages.length > 3) {
+                M.toast({html: '最多只能上传3张图片', classes: 'red'});
+                input.value = '';
+                return;
+            }
+            
+            for (let i = 0; i < files.length; i++) {
+                if (uploadedImages.length >= 3) break;
+                
+                const file = files[i];
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    const imgData = e.target.result;
+                    uploadedImages.push(imgData);
+                    
+                    const imgContainer = document.createElement('div');
+                    imgContainer.style.position = 'relative';
+                    imgContainer.style.width = '100px';
+                    imgContainer.style.height = '100px';
+                    
+                    const img = document.createElement('img');
+                    img.src = imgData;
+                    img.style.width = '100%';
+                    img.style.height = '100%';
+                    img.style.objectFit = 'cover';
+                    img.style.borderRadius = '5px';
+                    
+                    const removeBtn = document.createElement('a');
+                    removeBtn.className = 'btn-floating btn-small red';
+                    removeBtn.style.position = 'absolute';
+                    removeBtn.style.top = '-10px';
+                    removeBtn.style.right = '-10px';
+                    removeBtn.style.padding = '0';
+                    removeBtn.style.minWidth = '24px';
+                    removeBtn.style.height = '24px';
+                    removeBtn.innerHTML = '<i class="material-icons" style="font-size: 14px;">close</i>';
+                    removeBtn.onclick = function() {
+                        const idx = uploadedImages.indexOf(imgData);
+                        if (idx > -1) uploadedImages.splice(idx, 1);
+                        imgContainer.remove();
+                        document.getElementById('imageData').value = JSON.stringify(uploadedImages);
+                    };
+                    
+                    imgContainer.appendChild(img);
+                    imgContainer.appendChild(removeBtn);
+                    preview.appendChild(imgContainer);
+                    
+                    document.getElementById('imageData').value = JSON.stringify(uploadedImages);
+                };
+                
+                reader.readAsDataURL(file);
+            }
+            
+            input.value = '';
+            M.toast({html: '已上传 ' + uploadedImages.length + '/3 张图片', classes: 'green'});
+        }
+
+        let recognition = null;
+        let currentField = null;
+        let isSpeechRecording = false;
+        let speechStopTimer = null;
+        let speechStopRequested = false;
+
+        function updateSpeechButton(fieldId, isActive) {
+            const micIcon = document.getElementById('mic-' + fieldId);
+            if (!micIcon) return;
+
+            micIcon.textContent = isActive ? 'stop' : 'mic';
+            micIcon.parentElement.title = isActive ? '点击结束语音输入' : '开始语音输入，再按一次结束';
+
+            if (isActive) {
+                micIcon.parentElement.classList.add('pulse');
+            } else {
+                micIcon.parentElement.classList.remove('pulse');
+            }
+        }
+
+        function stopSpeech(showToast = true) {
+            if (!recognition || !isSpeechRecording) return;
+
+            speechStopRequested = showToast;
+            recognition.stop();
+        }
+
+        function startSpeech(fieldId) {
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                M.toast({html: '您的浏览器不支持语音识别功能，请使用Chrome浏览器', classes: 'red'});
+                return;
+            }
+
+            if (isSpeechRecording && currentField === fieldId) {
+                stopSpeech(true);
+                return;
+            }
+
+            if (isSpeechRecording) {
+                stopSpeech(false);
+            }
+            
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            
+            recognition.lang = 'zh-CN';
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            
+            currentField = fieldId;
+            
+            recognition.onstart = function() {
+                isSpeechRecording = true;
+                updateSpeechButton(fieldId, true);
+                M.toast({html: '正在录音，点击麦克风可结束输入', classes: 'blue'});
+            };
+            
+            recognition.onresult = function(event) {
+                let finalTranscript = '';
+                let interimTranscript = '';
+                
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript;
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+                
+                const textarea = document.getElementById(fieldId);
+                if (finalTranscript) {
+                    textarea.value += finalTranscript;
+                    M.textareaAutoResize(textarea);
+                }
+            };
+            
+            recognition.onerror = function(event) {
+                if (speechStopTimer) {
+                    clearTimeout(speechStopTimer);
+                    speechStopTimer = null;
+                }
+                isSpeechRecording = false;
+                updateSpeechButton(fieldId, false);
+                recognition = null;
+                currentField = null;
+
+                if (event.error === 'aborted') {
+                    return;
+                }
+
+                M.toast({html: '语音识别错误: ' + event.error, classes: 'red'});
+            };
+            
+            recognition.onend = function() {
+                if (speechStopTimer) {
+                    clearTimeout(speechStopTimer);
+                    speechStopTimer = null;
+                }
+
+                const shouldShowStopToast = speechStopRequested;
+                speechStopRequested = false;
+                isSpeechRecording = false;
+                updateSpeechButton(fieldId, false);
+                recognition = null;
+                currentField = null;
+
+                if (shouldShowStopToast) {
+                    M.toast({html: '语音输入已停止', classes: 'green'});
+                }
+            };
+            
+            recognition.start();
+            
+            speechStopTimer = setTimeout(() => {
+                if (recognition && isSpeechRecording && currentField === fieldId) {
+                    stopSpeech(true);
+                }
+            }, 10000);
+        }
+
+        function switchTab(tabId) {
+            // Hide all pages
+            document.getElementById('predict-page').style.display = 'none';
+            document.getElementById('train-page').style.display = 'none';
+            document.getElementById('stats-page').style.display = 'none';
+            
+            // Show selected page
+            var page = document.getElementById(tabId + '-page');
+            if (page) {
+                page.style.display = 'block';
+            }
+            
+            // Load stats data if stats tab
+            if (tabId === 'stats') {
+                loadStats();
+            }
+        }
+
+        document.getElementById('predictForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const resultSection = document.getElementById('result-section');
+            const similarityBadge = document.getElementById('similarity-badge');
+            const resultDiv = document.getElementById('predictResult');
+            
+            resultSection.style.display = 'block';
+            resultDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>正在分析并预测...</p></div>';
+
+            try {
+                const response = await fetch('/api/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        description: document.getElementById('description').value,
+                        suggestion: document.getElementById('suggestion').value,
+                        gid: document.getElementById('gid').value
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (!response.ok) throw new Error(result.error || '预测失败');
+
+                similarityBadge.textContent = '匹配度: ' + (result.similarity * 100).toFixed(1) + '%';
+
+                let html = '<div class="row">';
+                for (const [field, label] of Object.entries(fieldLabels)) {
+                    const options = fieldOptions[field] || [];
+                    const currentValue = result[field] || '';
+                    
+                    html += `
+                        <div class="input-field col s6">
+                            <i class="material-icons prefix">chevron_right</i>
+                            <select id="select_${field}" class="validate">
+                                <option value="">请选择</option>
+                                ${options.map(opt => `<option value="${opt}" ${opt === currentValue ? 'selected' : ''}>${opt}</option>`).join('')}
+                            </select>
+                            <label class="active">${label}</label>
+                        </div>
+                    `;
+                }
+                html += '</div>';
+                resultDiv.innerHTML = html;
+                $('select').formSelect();
+                document.getElementById('action-buttons').style.display = 'block';
+
+                if ((result.similarity || 0) < 0.5) {
+                    showLowMatchModal(result.similarity || 0);
+                }
+            } catch (err) {
+                resultDiv.innerHTML = '<div class="error-msg">' + err.message + '</div>';
+            }
+        });
+
+        function showLowMatchModal(similarity) {
+            const modalText = document.getElementById('lowMatchModalText');
+            const percentage = (similarity * 100).toFixed(1);
+            modalText.textContent = '当前匹配度仅为 ' + percentage + '%，请员工确认输入的信息是否准确、完整，再决定是否继续使用该预测结果。';
+
+            const modalElement = document.getElementById('lowMatchModal');
+            const instance = M.Modal.getInstance(modalElement) || M.Modal.init(modalElement);
+            instance.open();
+        }
+
+        function closeForm() {
+            document.getElementById('result-section').style.display = 'none';
+            document.getElementById('action-buttons').style.display = 'none';
+            document.getElementById('predictForm').reset();
+            document.getElementById('imagePreview').innerHTML = '';
+            uploadedImages = [];
+            document.getElementById('imageData').value = '';
+        }
+
+        function saveForm() {
+            const data = {
+                gid: document.getElementById('gid').value,
+                description: document.getElementById('description').value,
+                suggestion: document.getElementById('suggestion').value,
+                images: uploadedImages
+            };
+            
+            for (const field of Object.keys(fieldLabels)) {
+                const selectEl = document.getElementById('select_' + field);
+                if (selectEl) {
+                    data[field] = selectEl.value;
+                }
+            }
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'suggestion_data.json';
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            M.toast({html: '数据已保存到文件', classes: 'green'});
+        }
+
+        function submitForm() {
+            const data = {
+                gid: document.getElementById('gid').value,
+                description: document.getElementById('description').value,
+                suggestion: document.getElementById('suggestion').value,
+                images: uploadedImages
+            };
+            
+            for (const field of Object.keys(fieldLabels)) {
+                const selectEl = document.getElementById('select_' + field);
+                if (selectEl) {
+                    data[field] = selectEl.value;
+                }
+            }
+            
+            fetch('/api/submit', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            }).then(r => r.json()).then(r => {
+                if (r.success) {
+                    M.toast({html: '提交成功! 数据已保存并重新训练模型', classes: 'green'});
+                    if (r.modelStats) {
+                        console.log('Model Stats:', r.modelStats);
+                    }
+                } else {
+                    M.toast({html: '提交失败: ' + r.error, classes: 'red'});
+                }
+            }).catch(e => {
+                M.toast({html: '提交失败: ' + e.message, classes: 'red'});
+            });
+        }
+
+        async function trainModel() {
+            const resultDiv = document.getElementById('trainResult');
+            resultDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>正在读取数据并训练模型...</p></div>';
+
+            try {
+                const response = await fetch('/api/import', { method: 'POST' });
+                const result = await response.json();
+                
+                if (result.success) {
+                    resultDiv.innerHTML = '<div class="success-msg"><i class="material-icons left">check_circle</i>模型训练成功! 共 ' + result.total + ' 条记录</div>';
+                } else {
+                    resultDiv.innerHTML = '<div class="error-msg">' + result.error + '</div>';
+                }
+            } catch (err) {
+                resultDiv.innerHTML = '<div class="error-msg">' + err.message + '</div>';
+            }
+        }
+
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const stats = await response.json();
+                
+                let html = '<div class="form-card"><div class="row">';
+                html += `
+                    <div class="input-field col s6">
+                        <i class="material-icons prefix">storage</i>
+                        <input disabled value="${stats.total}" type="text">
+                        <label>总记录数</label>
+                    </div>
+                    <div class="input-field col s6">
+                        <i class="material-icons prefix">business</i>
+                        <input disabled value="${stats.departments.length}" type="text">
+                        <label>部门数</label>
+                    </div>
+                    <div class="input-field col s6">
+                        <i class="material-icons prefix">category</i>
+                        <input disabled value="${stats.itemTypes.length}" type="text">
+                        <label>建议类型数</label>
+                    </div>
+                    <div class="input-field col s6">
+                        <i class="material-icons prefix">people</i>
+                        <input disabled value="${stats.laborTypes.length}" type="text">
+                        <label>用工类型数</label>
+                    </div>
+                `;
+                html += '</div></div>';
+
+                html += '<div class="form-card" style="margin-top: 20px;">';
+                html += '<div class="section-title"><i class="material-icons left">info</i>指标说明与量化方式</div>';
+                html += '<div class="row">';
+                html += '<div class="col s12 m6 l3"><p><strong>相似度分布</strong><br>表示样本在历史库中找到最近邻记录时的相似度区间分布，范围通常为 0 到 1，越高说明文本越接近历史案例。</p></div>';
+                html += '<div class="col s12 m6 l3"><p><strong>准确率 Accuracy</strong><br>预测正确样本数除以总测试样本数，用来衡量整体预测正确比例。</p></div>';
+                html += '<div class="col s12 m6 l3"><p><strong>精准率 Precision</strong><br>模型预测为某类后实际预测正确的比例，反映误报多少。</p></div>';
+                html += '<div class="col s12 m6 l3"><p><strong>召回率 Recall / F1</strong><br>召回率表示真实样本被找回的比例，F1 是精准率与召回率的平衡值，越高越稳定。</p></div>';
+                html += '</div>';
+                html += '<p style="margin-top: 10px; color: #666;">当前页面中的分类指标基于 80/20 训练集-测试集划分，用训练集构建 TF-IDF 表示，再用最近邻匹配测试集样本得到结果。</p>';
+                html += '</div>';
+                
+                // Load model stats
+                try {
+                    const modelResponse = await fetch('/api/model-stats');
+                    const modelStats = await modelResponse.json();
+                    
+                    html += '<div class="form-card" style="margin-top: 20px;">';
+                    html += '<div class="section-title"><i class="material-icons left">model_training</i>模型统计</div>';
+                    html += '<div class="row">';
+                    
+                    html += `
+                        <div class="input-field col s6">
+                            <i class="material-icons prefix">storage</i>
+                            <input disabled value="${modelStats.totalDataVolume || 0}" type="text">
+                            <label>Total Data Volume</label>
+                        </div>
+                        <div class="input-field col s6">
+                            <i class="material-icons prefix">tune</i>
+                            <input disabled value="${modelStats.numberOfFeatures || 0}" type="text">
+                            <label>Number of Features</label>
+                        </div>
+                        <div class="input-field col s6">
+                            <i class="material-icons prefix">speed</i>
+                            <input disabled value="${modelStats.modelAccuracy || 0}%" type="text">
+                            <label>Model Accuracy</label>
+                        </div>
+                        <div class="input-field col s6">
+                            <i class="material-icons prefix">schedule</i>
+                            <input disabled value="${modelStats.lastTrained || '-'}" type="text">
+                            <label>Last Trained</label>
+                        </div>
+                    `;
+                    html += '</div></div>';
+                    
+                    if (modelStats.parameters) {
+                        html += '<div class="form-card" style="margin-top: 20px;">';
+                        html += '<div class="section-title"><i class="material-icons left">settings</i>模型参数</div>';
+                        html += '<div class="row">';
+                        
+                        const tfidf = modelStats.parameters.tfidf || {};
+                        const w2v = modelStats.parameters.word2vec || {};
+                        
+                        html += `
+                            <div class="input-field col s6">
+                                <i class="material-icons prefix">category</i>
+                                <input disabled value="${tfidf.vectorizerType || '-'}" type="text">
+                                <label>Vectorizer Type</label>
+                            </div>
+                            <div class="input-field col s6">
+                                <i class="material-icons prefix">memory</i>
+                                <input disabled value="${tfidf.maxFeatures || '-'}" type="text">
+                                <label>Max Features</label>
+                            </div>
+                            <div class="input-field col s6">
+                                <i class="material-icons prefix">compare_arrows</i>
+                                <input disabled value="${tfidf.ngramRange || '-'}" type="text">
+                                <label>N-gram Range</label>
+                            </div>
+                            <div class="input-field col s6">
+                                <i class="material-icons prefix">straighten</i>
+                                <input disabled value="${tfidf.similarityMetric || '-'}" type="text">
+                                <label>Similarity Metric</label>
+                            </div>
+                        `;
+                        html += '</div></div>';
+                        
+                        if (Object.keys(w2v).length > 0) {
+                            html += '<div class="form-card" style="margin-top: 20px;">';
+                            html += '<div class="section-title"><i class="material-icons left">hub</i>Word2Vec参数</div>';
+                            html += '<div class="row">';
+                            html += `
+                                <div class="input-field col s6">
+                                    <i class="material-icons prefix">dimensions</i>
+                                    <input disabled value="${w2v.vectorSize || '-'}" type="text">
+                                    <label>Vector Size</label>
+                                </div>
+                                <div class="input-field col s6">
+                                    <i class="material-icons prefix">window</i>
+                                    <input disabled value="${w2v.windowSize || '-'}" type="text">
+                                    <label>Window Size</label>
+                                </div>
+                                <div class="input-field col s6">
+                                    <i class="material-icons prefix">repeat</i>
+                                    <input disabled value="${w2v.epochs || '-'}" type="text">
+                                    <label>Epochs</label>
+                                </div>
+                                <div class="input-field col s6">
+                                    <i class="material-icons prefix">library_books</i>
+                                    <input disabled value="${w2v.vocabularySize || '-'}" type="text">
+                                    <label>Vocabulary Size</label>
+                                </div>
+                                <div class="input-field col s6">
+                                    <i class="material-icons prefix">smart_toy</i>
+                                    <input disabled value="${w2v.algorithm || '-'}" type="text">
+                                    <label>Algorithm</label>
+                                </div>
+                            `;
+                            html += '</div></div>';
+                        }
+                    }
+                    
+                } catch (e) {
+                    console.error('Failed to load model stats:', e);
+                }
+                
+                // Load chart data
+                try {
+                    const chartResponse = await fetch('/api/chart-data');
+                    const chartData = await chartResponse.json();
+                    
+                    let chartHtml = '';
+
+                    // Department Distribution Chart
+                    if (chartData.departmentDistribution && chartData.departmentDistribution.length > 0) {
+                        chartHtml += '<div class="chart-card">';
+                        chartHtml += '<div class="section-title"><i class="material-icons left">pie_chart</i>部门分布</div>';
+                        chartHtml += '<canvas id="deptChart" height="120"></canvas></div>';
+                        
+                        chartHtml += '<div class="chart-card">';
+                        chartHtml += '<div class="section-title"><i class="material-icons left">bar_chart</i>部门柱状图</div>';
+                        chartHtml += '<canvas id="deptBarChart" height="120"></canvas></div>';
+                    }
+                    
+                    // Item Type Distribution Chart
+                    if (chartData.itemTypeDistribution && chartData.itemTypeDistribution.length > 0) {
+                        chartHtml += '<div class="chart-card">';
+                        chartHtml += '<div class="section-title"><i class="material-icons left">category</i>建议类型分布</div>';
+                        chartHtml += '<canvas id="itemChart" height="120"></canvas></div>';
+                    }
+                    
+                    // Similarity Distribution Chart
+                    if (chartData.similarityDistribution && chartData.similarityDistribution.length > 0) {
+                        chartHtml += '<div class="chart-card">';
+                        chartHtml += '<div class="section-title"><i class="material-icons left">show_chart</i>相似度分布</div>';
+                        chartHtml += '<canvas id="simChart" height="120"></canvas></div>';
+                    }
+                    
+                    // Top Keywords Chart
+                    if (chartData.topKeywords && chartData.topKeywords.length > 0) {
+                        chartHtml += '<div class="chart-card">';
+                        chartHtml += '<div class="section-title"><i class="material-icons left">text_fields</i>TF-IDF关键词权重</div>';
+                        chartHtml += '<canvas id="keywordsChart" height="120"></canvas></div>';
+                    }
+
+                    if (chartHtml) {
+                        html += '<div class="chart-grid">' + chartHtml + '</div>';
+                    }
+                    
+                    document.getElementById('statsContent').innerHTML = html;
+                    M.updateTextFields();
+                    
+                    // Render charts after HTML is inserted
+                    setTimeout(() => {
+                        // Department Pie Chart
+                        if (chartData.departmentDistribution) {
+                            const deptCtx = document.getElementById('deptChart');
+                            if (deptCtx) {
+                                new Chart(deptCtx, {
+                                    type: 'doughnut',
+                                    data: {
+                                        labels: chartData.departmentDistribution.slice(0, 8).map(d => d.name),
+                                        datasets: [{
+                                            data: chartData.departmentDistribution.slice(0, 8).map(d => d.value),
+                                            backgroundColor: [
+                                                '#26a69a', '#00897b', '#4db6ac', '#80cbc4', '#b2dfdb',
+                                                '#00796b', '#009688', '#e0f2f1', '#1de9b6', '#a7ffeb'
+                                            ]
+                                        }]
+                                    },
+                                    options: { responsive: true, plugins: { legend: { position: 'right' } } }
+                                });
+                            }
+                            const deptBarCtx = document.getElementById('deptBarChart');
+                            if (deptBarCtx) {
+                                new Chart(deptBarCtx, {
+                                    type: 'bar',
+                                    data: {
+                                        labels: chartData.departmentDistribution.slice(0, 10).map(d => d.name.substring(0, 15)),
+                                        datasets: [{
+                                            label: '数量',
+                                            data: chartData.departmentDistribution.slice(0, 10).map(d => d.value),
+                                            backgroundColor: '#26a69a'
+                                        }]
+                                    },
+                                    options: { 
+                                        responsive: true,
+                                        plugins: { legend: { display: false } },
+                                        scales: { y: { beginAtZero: true } }
+                                    }
+                                });
+                            }
+                        }
+                        
+                        // Item Type Chart
+                        if (chartData.itemTypeDistribution) {
+                            const itemCtx = document.getElementById('itemChart');
+                            if (itemCtx) {
+                                new Chart(itemCtx, {
+                                    type: 'bar',
+                                    data: {
+                                        labels: chartData.itemTypeDistribution.slice(0, 10).map(d => d.name.substring(0, 20)),
+                                        datasets: [{
+                                            label: '数量',
+                                            data: chartData.itemTypeDistribution.slice(0, 10).map(d => d.value),
+                                            backgroundColor: '#2196f3'
+                                        }]
+                                    },
+                                    options: { 
+                                        responsive: true,
+                                        indexAxis: 'y',
+                                        plugins: { legend: { display: false } },
+                                        scales: { x: { beginAtZero: true } }
+                                    }
+                                });
+                            }
+                        }
+                        
+                        // Similarity Distribution Chart
+                        if (chartData.similarityDistribution) {
+                            const simCtx = document.getElementById('simChart');
+                            if (simCtx) {
+                                new Chart(simCtx, {
+                                    type: 'line',
+                                    data: {
+                                        labels: chartData.similarityDistribution.map(d => d.range),
+                                        datasets: [{
+                                            label: '记录数',
+                                            data: chartData.similarityDistribution.map(d => d.count),
+                                            borderColor: '#26a69a',
+                                            backgroundColor: 'rgba(38, 166, 154, 0.2)',
+                                            fill: true,
+                                            tension: 0.4
+                                        }]
+                                    },
+                                    options: { 
+                                        responsive: true,
+                                        plugins: { legend: { display: false } },
+                                        scales: { y: { beginAtZero: true } }
+                                    }
+                                });
+                            }
+                        }
+                        
+                        // Keywords Chart
+                        if (chartData.topKeywords) {
+                            const kwCtx = document.getElementById('keywordsChart');
+                            if (kwCtx) {
+                                new Chart(kwCtx, {
+                                    type: 'bar',
+                                    data: {
+                                        labels: chartData.topKeywords.map(k => k.word),
+                                        datasets: [{
+                                            label: 'TF-IDF权重',
+                                            data: chartData.topKeywords.map(k => k.weight),
+                                            backgroundColor: '#ff7043'
+                                        }]
+                                    },
+                                    options: { 
+                                        responsive: true,
+                                        indexAxis: 'y',
+                                        plugins: { legend: { display: false } },
+                                        scales: { x: { beginAtZero: true } }
+                                    }
+                                });
+                            }
+                        }
+                    }, 100);
+                    
+                } catch (e) {
+                    console.error('Failed to load chart data:', e);
+                }
+                
+                // Load model evaluation data
+                let evalHtml = '';
+                try {
+                    const evalResponse = await fetch('/api/model-evaluation');
+                    const evalData = await evalResponse.json();
+                    
+                    if (evalData && Object.keys(evalData).length > 0 && !evalData.error) {
+                        evalHtml += '<div class="form-card" style="margin-top: 20px;">';
+                        evalHtml += '<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">';
+                        evalHtml += '<div class="section-title" style="margin-bottom:0;"><i class="material-icons left">assessment</i>模型评估 - 各字段拟合分析</div>';
+                        evalHtml += '<button class="btn btn-action waves-effect waves-light" type="button" onclick="reloadEvaluationData()">';
+                        evalHtml += '<i class="material-icons left">refresh</i>重新加载评估数据';
+                        evalHtml += '</button>';
+                        evalHtml += '</div>';
+                        
+                        // Create select for field selection
+                        evalHtml += '<div class="input-field">';
+                        evalHtml += '<select id="evalFieldSelect" onchange="renderEvalCharts()">';
+                        evalHtml += '<option value="" disabled selected>选择预测字段</option>';
+                        for (const [field, metrics] of Object.entries(evalData)) {
+                            evalHtml += `<option value="${field}">${field} (${metrics.uniqueClasses}类)</option>`;
+                        }
+                        evalHtml += '</select>';
+                        evalHtml += '<label>选择预测字段查看评估指标</label>';
+                        evalHtml += '</div>';
+                        
+                        evalHtml += '<div id="evalMetrics"></div>';
+                        
+                        evalHtml += '</div>';
+                        
+                        // Store evalData globally for field switching
+                        window.evalData = evalData;
+                    }
+                } catch (e) {
+                    console.error('Failed to load model evaluation:', e);
+                }
+                
+                if (evalHtml) {
+                    document.getElementById('statsContent').insertAdjacentHTML('beforeend', evalHtml);
+                }
+                M.updateTextFields();
+                
+                // Initialize select
+                setTimeout(() => {
+                    const select = document.getElementById('evalFieldSelect');
+                    if (select) {
+                        M.FormSelect.init(select);
+                    }
+                }, 200);
+            } catch (err) {
+                document.getElementById('statsContent').innerHTML = '<div class="error-msg">' + err.message + '</div>';
+            }
+        }
+
+        $(document).ready(function() {
+            M.AutoInit();
+        });
+
+        async function reloadEvaluationData() {
+            const container = document.getElementById('evalMetrics');
+            const select = document.getElementById('evalFieldSelect');
+            if (container) {
+                container.innerHTML = '<div class="loading"><div class="spinner"></div><p>正在重新加载评估数据...</p></div>';
+            }
+
+            try {
+                const response = await fetch('/api/model-evaluation');
+                const evalData = await response.json();
+
+                if (!evalData || evalData.error || Object.keys(evalData).length === 0) {
+                    throw new Error((evalData && evalData.error) || '评估数据为空');
+                }
+
+                window.evalData = evalData;
+
+                if (select) {
+                    const currentValue = select.value;
+                    let optionsHtml = '<option value="" disabled>选择预测字段</option>';
+                    for (const [field, metrics] of Object.entries(evalData)) {
+                        const selected = field === currentValue ? ' selected' : '';
+                        optionsHtml += `<option value="${field}"${selected}>${field} (${metrics.uniqueClasses}类)</option>`;
+                    }
+                    select.innerHTML = optionsHtml;
+                    M.FormSelect.init(select);
+                }
+
+                if (select && select.value && evalData[select.value]) {
+                    renderEvalCharts();
+                } else if (container) {
+                    container.innerHTML = '<div class="success-msg">评估数据已刷新，请重新选择字段查看。</div>';
+                }
+
+                M.toast({html: '评估数据已刷新', classes: 'green'});
+            } catch (err) {
+                if (container) {
+                    container.innerHTML = '<div class="error-msg">重新加载失败: ' + err.message + '</div>';
+                }
+                M.toast({html: '重新加载失败: ' + err.message, classes: 'red'});
+            }
+        }
+        
+        function renderEvalCharts() {
+            const select = document.getElementById('evalFieldSelect');
+            const field = select.value;
+            const evalData = window.evalData;
+            
+            if (!field || !evalData || !evalData[field]) return;
+            
+            const metrics = evalData[field];
+            const container = document.getElementById('evalMetrics');
+            
+            // Render metrics as progress bars
+            let html = '<div style="margin-top: 20px;">';
+            html += '<h5>' + field + ' 评估指标</h5>';
+            html += '<p style="color: #666; margin-bottom: 12px;">' + (metrics.evaluationMethod || '') + '</p>';
+            html += '<p style="margin-bottom: 8px;"><strong>训练集:</strong> ' + (metrics.trainSize || 0) + ' 条 &nbsp; <strong>测试集:</strong> ' + (metrics.testSize || 0) + ' 条 &nbsp; <strong>平均最近邻相似度:</strong> ' + (((metrics.meanSimilarity || 0) * 100).toFixed(1)) + '%</p>';
+            
+            const metricsList = [
+                { name: '准确率', key: 'accuracy', color: '#26a69a' },
+                { name: '精确率', key: 'precision', color: '#2196f3' },
+                { name: '召回率', key: 'recall', color: '#ff7043' },
+                { name: 'F1分数', key: 'f1', color: '#7e57c2' }
+            ];
+            
+            for (const item of metricsList) {
+                const value = metrics[item.key] || 0;
+                html += '<div style="margin-bottom: 15px;">';
+                html += '<div style="display: flex; justify-content: space-between; margin-bottom: 5px;">';
+                html += '<span>' + item.name + '</span>';
+                html += '<span>' + (value * 100).toFixed(1) + '%</span>';
+                html += '</div>';
+                html += '<div style="background: #eee; border-radius: 10px; height: 20px; overflow: hidden;">';
+                html += '<div style="background: ' + item.color + '; width: ' + (value * 100) + '%; height: 100%; border-radius: 10px;"></div>';
+                html += '</div>';
+                html += '</div>';
+            }
+            
+            html += '<p style="margin-top: 15px;"><strong>类别数:</strong> ' + metrics.uniqueClasses + '</p>';
+            
+            container.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
