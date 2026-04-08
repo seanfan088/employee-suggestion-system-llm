@@ -34,6 +34,14 @@
         .error-msg { background: #ffebee; color: #c62828; padding: 15px; border-radius: 5px; margin-top: 15px; }
         .success-msg { background: #e8f5e9; color: #2e7d32; padding: 15px; border-radius: 5px; margin-top: 15px; }
         .similarity-badge { background: #26a69a; color: white; padding: 5px 15px; border-radius: 5px; font-weight: bold; }
+        .result-divider { border: 0; border-top: 1px solid #e0e0e0; margin: 24px 0; }
+        .ai-suggestion-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+        .ai-suggestion-card { border: 1px solid #d7ece8; border-radius: 12px; background: linear-gradient(180deg, #f9fffe, #ffffff); padding: 16px; box-shadow: 0 6px 18px rgba(38, 166, 154, 0.08); }
+        .ai-suggestion-card h6 { margin: 0 0 12px; font-size: 16px; color: #00796b; }
+        .ai-suggestion-item { margin-bottom: 10px; }
+        .ai-suggestion-item:last-child { margin-bottom: 0; }
+        .ai-suggestion-label { display: block; font-size: 12px; color: #607d8b; margin-bottom: 4px; }
+        .ai-suggestion-value { display: block; color: #263238; line-height: 1.5; word-break: break-word; }
         .input-field { position: relative; }
         .input-field .btn-floating { position: absolute; right: 10px; top: 10px; z-index: 10; }
         .pulse { animation: pulse 1s infinite; }
@@ -174,6 +182,13 @@
                                         <span class="similarity-badge right" id="similarity-badge">匹配度: 0%</span>
                                     </div>
                                     <div id="predictResult"></div>
+                                    <div id="aiSuggestionSection" style="display:none;">
+                                        <hr class="result-divider">
+                                        <div class="section-title">
+                                            <i class="material-icons left">auto_awesome</i>AI建议
+                                        </div>
+                                        <div id="aiSuggestionContent"></div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -286,7 +301,176 @@
             'AreaType': '区域类型'
         };
 
+        const aiSuggestionFieldLabels = {
+            ownerRole: '责任角色',
+            action: '行动',
+            toolOrSystem: '工具/系统',
+            expectedResult: '预期结果',
+            startWindow: '启动时间窗'
+        };
+
         let fieldOptions = {};
+        let currentAiRequestId = null;
+        let currentAiSuggestions = [];
+
+        function createRequestId() {
+            return 'req_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+        }
+
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function getAiSuggestionElements() {
+            return {
+                section: document.getElementById('aiSuggestionSection'),
+                content: document.getElementById('aiSuggestionContent')
+            };
+        }
+
+        function renderAiSuggestionState(type, message) {
+            const aiSuggestionElements = getAiSuggestionElements();
+            aiSuggestionElements.section.style.display = 'block';
+
+            if (type === 'loading') {
+                aiSuggestionElements.content.innerHTML = '<div class="loading"><div class="spinner"></div><p>正在生成AI建议...</p></div>';
+                return;
+            }
+
+            if (type === 'error') {
+                aiSuggestionElements.content.innerHTML = '<div class="error-msg">' + escapeHtml(message || 'AI建议生成失败') + '</div>';
+                return;
+            }
+
+            aiSuggestionElements.content.innerHTML = '<div class="empty-state"><i class="material-icons medium">lightbulb_outline</i><p>' + escapeHtml(message || '暂无AI建议') + '</p></div>';
+        }
+
+        function renderAiSuggestionCards(aiSuggestions) {
+            const aiSuggestionElements = getAiSuggestionElements();
+            const cards = Array.isArray(aiSuggestions) ? aiSuggestions.map((card, index) => ({
+                suggestionId: card.suggestionId || ('sg_' + (index + 1)),
+                originalSuggestionId: card.originalSuggestionId || card.suggestionId || ('sg_' + (index + 1)),
+                ownerRole: card.ownerRole || '',
+                action: card.action || '',
+                toolOrSystem: card.toolOrSystem || '',
+                expectedResult: card.expectedResult || '',
+                startWindow: card.startWindow || '',
+                state: card.state || 'generated'
+            })) : [];
+
+            currentAiSuggestions = cards;
+
+            aiSuggestionElements.section.style.display = 'block';
+
+            if (cards.length === 0) {
+                renderAiSuggestionState('empty', '暂无AI建议');
+                return;
+            }
+
+            const cardsHtml = cards.map((card, index) => {
+                return `
+                    <div class="ai-suggestion-card" data-suggestion-id="${escapeHtml(card.suggestionId)}">
+                        <h6>建议 ${index + 1}</h6>
+                        ${Object.entries(aiSuggestionFieldLabels).map(([field, label]) => `
+                            <div class="ai-suggestion-item">
+                                <span class="ai-suggestion-label">${label}</span>
+                                <textarea class="materialize-textarea ai-suggestion-input" data-field="${field}" ${card.state === 'discarded' ? 'disabled' : ''}>${escapeHtml(card[field])}</textarea>
+                            </div>
+                        `).join('')}
+                        <div class="ai-suggestion-actions" style="display:flex;gap:8px;margin-top:12px;">
+                            <button type="button" class="btn-small green" onclick="setAiSuggestionState('${escapeHtml(card.suggestionId)}','accepted')">采用</button>
+                            <button type="button" class="btn-small blue" onclick="setAiSuggestionState('${escapeHtml(card.suggestionId)}','edited')">编辑</button>
+                            <button type="button" class="btn-small red" onclick="setAiSuggestionState('${escapeHtml(card.suggestionId)}','discarded')">丢弃</button>
+                            <span class="new badge ${card.state === 'accepted' ? 'green' : card.state === 'edited' ? 'blue' : card.state === 'discarded' ? 'red' : 'grey'}" data-badge-caption="">${card.state}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            aiSuggestionElements.content.innerHTML = '<div class="ai-suggestion-grid">' + cardsHtml + '</div>';
+            document.querySelectorAll('.ai-suggestion-input').forEach((input) => {
+                M.textareaAutoResize(input);
+            });
+        }
+
+        function setAiSuggestionState(suggestionId, state) {
+            currentAiSuggestions = currentAiSuggestions.map((card) => {
+                if (card.suggestionId === suggestionId) {
+                    return { ...card, state };
+                }
+                return card;
+            });
+            syncAiSuggestionsFromDom();
+            renderAiSuggestionCards(currentAiSuggestions);
+        }
+
+        function syncAiSuggestionsFromDom() {
+            currentAiSuggestions = currentAiSuggestions.map((card) => {
+                const cardEl = document.querySelector(`[data-suggestion-id="${card.suggestionId}"]`);
+                if (!cardEl) return card;
+
+                const updated = { ...card };
+                cardEl.querySelectorAll('.ai-suggestion-input').forEach((input) => {
+                    updated[input.dataset.field] = input.value.trim();
+                });
+                return updated;
+            });
+        }
+
+        function resetAiSuggestionSection() {
+            const aiSuggestionElements = getAiSuggestionElements();
+            aiSuggestionElements.section.style.display = 'none';
+            aiSuggestionElements.content.innerHTML = '';
+            currentAiSuggestions = [];
+        }
+
+        async function loadAiSuggestions(description, suggestion, requestId) {
+            renderAiSuggestionState('loading');
+
+            try {
+                const response = await fetch('/api/generate-ai-suggestions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        description: description,
+                        suggestion: suggestion,
+                        requestId: requestId
+                    })
+                });
+
+                const result = await response.json();
+
+                if (requestId !== currentAiRequestId) {
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(result.error || 'AI建议生成失败');
+                }
+
+                if (!Array.isArray(result.aiSuggestions) || result.aiSuggestions.length === 0) {
+                    if (result.status === 'timeout' || result.status === 'model_unavailable' || result.status === 'validation_failed' || result.status === 'generation_failed' || result.status === 'repair_failed') {
+                        renderAiSuggestionState('error', result.message || 'AI建议生成失败');
+                        return;
+                    }
+
+                    renderAiSuggestionState('empty', result.message || '暂无AI建议');
+                    return;
+                }
+
+                renderAiSuggestionCards(result.aiSuggestions || []);
+            } catch (err) {
+                if (requestId !== currentAiRequestId) {
+                    return;
+                }
+                renderAiSuggestionState('error', err.message || 'AI建议生成失败');
+            }
+        }
 
         async function loadFieldOptions() {
             try {
@@ -507,18 +691,24 @@
             const resultSection = document.getElementById('result-section');
             const similarityBadge = document.getElementById('similarity-badge');
             const resultDiv = document.getElementById('predictResult');
+            const description = document.getElementById('description').value;
+            const suggestion = document.getElementById('suggestion').value;
+            const gid = document.getElementById('gid').value;
+            const requestId = createRequestId();
+            currentAiRequestId = requestId;
             
             resultSection.style.display = 'block';
             resultDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>正在分析并预测...</p></div>';
+            resetAiSuggestionSection();
 
             try {
                 const response = await fetch('/api/predict', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        description: document.getElementById('description').value,
-                        suggestion: document.getElementById('suggestion').value,
-                        gid: document.getElementById('gid').value
+                        description: description,
+                        suggestion: suggestion,
+                        gid: gid
                     })
                 });
 
@@ -547,6 +737,7 @@
                 html += '</div>';
                 resultDiv.innerHTML = html;
                 $('select').formSelect();
+                await loadAiSuggestions(description, suggestion, requestId);
                 document.getElementById('action-buttons').style.display = 'block';
 
                 if ((result.similarity || 0) < 0.5) {
@@ -574,14 +765,18 @@
             document.getElementById('imagePreview').innerHTML = '';
             uploadedImages = [];
             document.getElementById('imageData').value = '';
+            currentAiRequestId = null;
+            resetAiSuggestionSection();
         }
 
         function saveForm() {
+            syncAiSuggestionsFromDom();
             const data = {
                 gid: document.getElementById('gid').value,
                 description: document.getElementById('description').value,
                 suggestion: document.getElementById('suggestion').value,
-                images: uploadedImages
+                images: uploadedImages,
+                aiSuggestions: currentAiSuggestions
             };
             
             for (const field of Object.keys(fieldLabels)) {
@@ -603,19 +798,27 @@
         }
 
         function submitForm() {
+            syncAiSuggestionsFromDom();
+            const predictedFields = {};
+            for (const field of Object.keys(fieldLabels)) {
+                const selectEl = document.getElementById('select_' + field);
+                if (selectEl) {
+                    predictedFields[field] = selectEl.value;
+                }
+            }
+
             const data = {
                 gid: document.getElementById('gid').value,
                 description: document.getElementById('description').value,
                 suggestion: document.getElementById('suggestion').value,
-                images: uploadedImages
+                images: uploadedImages,
+                predictedFields,
+                aiSuggestions: currentAiSuggestions,
+                submissionId: createRequestId(),
+                retryKey: createRequestId()
             };
-            
-            for (const field of Object.keys(fieldLabels)) {
-                const selectEl = document.getElementById('select_' + field);
-                if (selectEl) {
-                    data[field] = selectEl.value;
-                }
-            }
+
+            Object.assign(data, predictedFields);
             
             fetch('/api/submit', {
                 method: 'POST',
@@ -724,6 +927,31 @@
                             <input disabled value="${modelStats.lastTrained || '-'}" type="text">
                             <label>Last Trained</label>
                         </div>
+                        <div class="input-field col s6">
+                            <i class="material-icons prefix">smart_toy</i>
+                            <input disabled value="${modelStats.llmModelName || '-'}" type="text">
+                            <label>LLM Model Name</label>
+                        </div>
+                        <div class="input-field col s6">
+                            <i class="material-icons prefix">psychology</i>
+                            <input disabled value="${modelStats.aiSuggestionsGenerated || 0}" type="text">
+                            <label>AI Suggestions Generated</label>
+                        </div>
+                        <div class="input-field col s6">
+                            <i class="material-icons prefix">thumb_up</i>
+                            <input disabled value="${modelStats.acceptedAiSuggestions || 0}" type="text">
+                            <label>Accepted AI Suggestions</label>
+                        </div>
+                        <div class="input-field col s6">
+                            <i class="material-icons prefix">percent</i>
+                            <input disabled value="${modelStats.aiSuggestionAcceptanceRate || 0}%" type="text">
+                            <label>AI Suggestion Acceptance Rate</label>
+                        </div>
+                        <div class="input-field col s6">
+                            <i class="material-icons prefix">fact_check</i>
+                            <input disabled value="${modelStats.predictionResults || 0}" type="text">
+                            <label>Prediction Results</label>
+                        </div>
                     `;
                     html += '</div></div>';
                     
@@ -733,6 +961,7 @@
                         html += '<div class="row">';
                         
                         const tfidf = modelStats.parameters.tfidf || {};
+                        const ollama = modelStats.parameters.ollama || {};
                         const w2v = modelStats.parameters.word2vec || {};
                         
                         html += `
@@ -758,6 +987,35 @@
                             </div>
                         `;
                         html += '</div></div>';
+
+                        if (Object.keys(ollama).length > 0) {
+                            html += '<div class="form-card" style="margin-top: 20px;">';
+                            html += '<div class="section-title"><i class="material-icons left">memory</i>Ollama参数</div>';
+                            html += '<div class="row">';
+                            html += `
+                                <div class="input-field col s6">
+                                    <i class="material-icons prefix">dns</i>
+                                    <input disabled value="${ollama.baseUrl || '-'}" type="text">
+                                    <label>Base URL</label>
+                                </div>
+                                <div class="input-field col s6">
+                                    <i class="material-icons prefix">smart_toy</i>
+                                    <input disabled value="${ollama.model || '-'}" type="text">
+                                    <label>Model</label>
+                                </div>
+                                <div class="input-field col s6">
+                                    <i class="material-icons prefix">timer</i>
+                                    <input disabled value="${ollama.timeoutSeconds || '-'}" type="text">
+                                    <label>Timeout Seconds</label>
+                                </div>
+                                <div class="input-field col s6">
+                                    <i class="material-icons prefix">list</i>
+                                    <input disabled value="${ollama.maxCases || '-'}" type="text">
+                                    <label>Max Cases</label>
+                                </div>
+                            `;
+                            html += '</div></div>';
+                        }
                         
                         if (Object.keys(w2v).length > 0) {
                             html += '<div class="form-card" style="margin-top: 20px;">';
@@ -792,6 +1050,35 @@
                             `;
                             html += '</div></div>';
                         }
+                    }
+
+                    if (modelStats.attributes) {
+                        html += '<div class="form-card" style="margin-top: 20px;">';
+                        html += '<div class="section-title"><i class="material-icons left">rule</i>Attributes</div>';
+                        html += '<div class="row">';
+                        html += `
+                            <div class="input-field col s12">
+                                <i class="material-icons prefix">badge</i>
+                                <input disabled value="${(modelStats.attributes.employeeFields || []).join(', ')}" type="text">
+                                <label>Employee Fields</label>
+                            </div>
+                            <div class="input-field col s12">
+                                <i class="material-icons prefix">assignment</i>
+                                <input disabled value="${(modelStats.attributes.suggestionFields || []).join(', ')}" type="text">
+                                <label>Suggestion Fields</label>
+                            </div>
+                            <div class="input-field col s12">
+                                <i class="material-icons prefix">task_alt</i>
+                                <input disabled value="${(modelStats.attributes.aiRequiredFields || []).join(', ')}" type="text">
+                                <label>AI Required Fields</label>
+                            </div>
+                            <div class="input-field col s12">
+                                <i class="material-icons prefix">block</i>
+                                <input disabled value="${(modelStats.attributes.bannedActionWords || []).join(', ')}" type="text">
+                                <label>Banned Action Words</label>
+                            </div>
+                        `;
+                        html += '</div></div>';
                     }
                     
                 } catch (e) {

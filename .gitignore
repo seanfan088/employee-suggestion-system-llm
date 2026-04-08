@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pkl
+*.model
+data/
+models/
+*.jsonl
+node_modules/
+.DS_Store
