@@ -7,6 +7,7 @@
     <link type="text/css" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/materialize-css@1.0.0/dist/css/materialize.min.css">
     <link type="text/css" rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f5f5f5; }
         .navbar-main { background: linear-gradient(45deg, #26a69a, #00897b) !important; }
@@ -20,6 +21,11 @@
         .input-field > i { color: #26a69a !important; }
         .prefix ~ input, .prefix ~ textarea { margin-left: 3rem; }
         .section-title { font-size: 16px; font-weight: 600; color: #26a69a; margin-bottom: 10px; }
+        .section-title-row { display: flex; justify-content: space-between; align-items: center; }
+        .chart-zoom-btns { display: flex; gap: 4px; }
+        .chart-zoom-btns button { background: #26a69a; color: white; border: none; border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 14px; }
+        .chart-zoom-btns button:hover { background: #00897b; }
+        .chart-card canvas { height: 220px; }
         .form-card { background: white; border-radius: 10px; padding: 20px; margin-top: 20px; }
         .chart-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
         .chart-card { background: white; border-radius: 10px; padding: 16px; }
@@ -686,6 +692,44 @@
             }
         }
 
+        const chartScales = {};
+        function resizeChart(canvasId, factor) {
+            console.log('resizeChart called:', canvasId, factor);
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) {
+                console.log('Canvas not found:', canvasId);
+                return;
+            }
+            // Get current height from stored value or style
+            let currentHeight = chartScales[canvasId];
+            if (!currentHeight) {
+                currentHeight = parseInt(canvas.style.height) || 220;
+            }
+            const newHeight = Math.max(100, Math.min(600, Math.round(currentHeight * factor)));
+            canvas.style.height = newHeight + 'px';
+            chartScales[canvasId] = newHeight;
+            const chart = Chart.getChart(canvas);
+            if (chart) {
+                console.log('Chart found, resizing');
+                chart.resize();
+            } else {
+                console.log('Chart not found');
+            }
+        }
+        
+        function resetChartZoom(canvasId) {
+            console.log('resetChartZoom called:', canvasId);
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            canvas.style.height = '220px';
+            delete chartScales[canvasId];
+            const chart = Chart.getChart(canvas);
+            if (chart) {
+                chart.resetZoom();
+                chart.resize();
+            }
+        }
+
         document.getElementById('predictForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const resultSection = document.getElementById('result-section');
@@ -1095,33 +1139,40 @@
                     // Department Distribution Chart
                     if (chartData.departmentDistribution && chartData.departmentDistribution.length > 0) {
                         chartHtml += '<div class="chart-card">';
-                        chartHtml += '<div class="section-title"><i class="material-icons left">pie_chart</i>部门分布</div>';
-                        chartHtml += '<canvas id="deptChart" height="120"></canvas></div>';
+                        chartHtml += '<div class="section-title-row"><span><i class="material-icons left">pie_chart</i>部门分布</span><div class="chart-zoom-btns"><button onclick="resizeChart(\'deptChart\', 1.2)">+</button><button onclick="resizeChart(\'deptChart\', 0.8)">-</button><button onclick="resetChartZoom(\'deptChart\')">Reset</button></div></div>';
+                        chartHtml += '<canvas id="deptChart" style="height: 220px;"></canvas></div>';
                         
                         chartHtml += '<div class="chart-card">';
-                        chartHtml += '<div class="section-title"><i class="material-icons left">bar_chart</i>部门柱状图</div>';
-                        chartHtml += '<canvas id="deptBarChart" height="120"></canvas></div>';
+                        chartHtml += '<div class="section-title-row"><span><i class="material-icons left">bar_chart</i>部门柱状图</span><div class="chart-zoom-btns"><button onclick="resizeChart(\'deptBarChart\', 1.2)">+</button><button onclick="resizeChart(\'deptBarChart\', 0.8)">-</button><button onclick="resetChartZoom(\'deptBarChart\')">Reset</button></div></div>';
+                        chartHtml += '<canvas id="deptBarChart" style="height: 220px;"></canvas></div>';
                     }
                     
                     // Item Type Distribution Chart
                     if (chartData.itemTypeDistribution && chartData.itemTypeDistribution.length > 0) {
                         chartHtml += '<div class="chart-card">';
-                        chartHtml += '<div class="section-title"><i class="material-icons left">category</i>建议类型分布</div>';
-                        chartHtml += '<canvas id="itemChart" height="120"></canvas></div>';
+                        chartHtml += '<div class="section-title-row"><span><i class="material-icons left">category</i>建议类型分布</span><div class="chart-zoom-btns"><button onclick="resizeChart(\'itemChart\', 1.2)">+</button><button onclick="resizeChart(\'itemChart\', 0.8)">-</button><button onclick="resetChartZoom(\'itemChart\')">Reset</button></div></div>';
+                        chartHtml += '<canvas id="itemChart" style="height: 220px;"></canvas></div>';
                     }
                     
                     // Similarity Distribution Chart
                     if (chartData.similarityDistribution && chartData.similarityDistribution.length > 0) {
                         chartHtml += '<div class="chart-card">';
-                        chartHtml += '<div class="section-title"><i class="material-icons left">show_chart</i>相似度分布</div>';
-                        chartHtml += '<canvas id="simChart" height="120"></canvas></div>';
+                        chartHtml += '<div class="section-title-row"><span><i class="material-icons left">show_chart</i>相似度分布</span><div class="chart-zoom-btns"><button onclick="resizeChart(\'simChart\', 1.2)">+</button><button onclick="resizeChart(\'simChart\', 0.8)">-</button><button onclick="resetChartZoom(\'simChart\')">Reset</button></div></div>';
+                        chartHtml += '<canvas id="simChart" style="height: 220px;"></canvas></div>';
                     }
                     
                     // Top Keywords Chart
                     if (chartData.topKeywords && chartData.topKeywords.length > 0) {
                         chartHtml += '<div class="chart-card">';
-                        chartHtml += '<div class="section-title"><i class="material-icons left">text_fields</i>TF-IDF关键词权重</div>';
-                        chartHtml += '<canvas id="keywordsChart" height="120"></canvas></div>';
+                        chartHtml += '<div class="section-title-row"><span><i class="material-icons left">text_fields</i>TF-IDF关键词权重</span><div class="chart-zoom-btns"><button onclick="resizeChart(\'keywordsChart\', 1.2)">+</button><button onclick="resizeChart(\'keywordsChart\', 0.8)">-</button><button onclick="resetChartZoom(\'keywordsChart\')">Reset</button></div></div>';
+                        chartHtml += '<canvas id="keywordsChart" style="height: 220px;"></canvas></div>';
+                    }
+                    
+                    // Location Distribution Chart
+                    if (chartData.locationDistribution && chartData.locationDistribution.length > 0) {
+                        chartHtml += '<div class="chart-card">';
+                        chartHtml += '<div class="section-title-row"><span><i class="material-icons left">location_on</i>位置分布</span><div class="chart-zoom-btns"><button onclick="resizeChart(\'locChart\', 1.2)">+</button><button onclick="resizeChart(\'locChart\', 0.8)">-</button><button onclick="resetChartZoom(\'locChart\')">Reset</button></div></div>';
+                        chartHtml += '<canvas id="locChart" style="height: 220px;"></canvas></div>';
                     }
 
                     if (chartHtml) {
@@ -1144,12 +1195,18 @@
                                         datasets: [{
                                             data: chartData.departmentDistribution.slice(0, 8).map(d => d.value),
                                             backgroundColor: [
-                                                '#26a69a', '#00897b', '#4db6ac', '#80cbc4', '#b2dfdb',
-                                                '#00796b', '#009688', '#e0f2f1', '#1de9b6', '#a7ffeb'
+                                                '#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', 
+                                                '#1abc9c', '#e67e22', '#34495e', '#16a085', '#c0392b'
                                             ]
                                         }]
                                     },
-                                    options: { responsive: true, plugins: { legend: { position: 'right' } } }
+                                    options: { 
+                                        responsive: true, 
+                                        plugins: { 
+                                            legend: { position: 'right' },
+                                            zoom: { zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'xy' } }
+                                        }
+                                    }
                                 });
                             }
                             const deptBarCtx = document.getElementById('deptBarChart');
@@ -1166,7 +1223,10 @@
                                     },
                                     options: { 
                                         responsive: true,
-                                        plugins: { legend: { display: false } },
+                                        plugins: { 
+                                            legend: { display: false },
+                                            zoom: { zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'xy' } }
+                                        },
                                         scales: { y: { beginAtZero: true } }
                                     }
                                 });
@@ -1190,7 +1250,10 @@
                                     options: { 
                                         responsive: true,
                                         indexAxis: 'y',
-                                        plugins: { legend: { display: false } },
+                                        plugins: { 
+                                            legend: { display: false },
+                                            zoom: { zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'xy' } }
+                                        },
                                         scales: { x: { beginAtZero: true } }
                                     }
                                 });
@@ -1216,7 +1279,10 @@
                                     },
                                     options: { 
                                         responsive: true,
-                                        plugins: { legend: { display: false } },
+                                        plugins: { 
+                                            legend: { display: false },
+                                            zoom: { zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'xy' } }
+                                        },
                                         scales: { y: { beginAtZero: true } }
                                     }
                                 });
@@ -1240,7 +1306,37 @@
                                     options: { 
                                         responsive: true,
                                         indexAxis: 'y',
-                                        plugins: { legend: { display: false } },
+                                        plugins: { 
+                                            legend: { display: false },
+                                            zoom: { zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'xy' } }
+                                        },
+                                        scales: { x: { beginAtZero: true } }
+                                    }
+                                });
+                            }
+                        }
+                        
+                        // Location Distribution Chart
+                        if (chartData.locationDistribution) {
+                            const locCtx = document.getElementById('locChart');
+                            if (locCtx) {
+                                new Chart(locCtx, {
+                                    type: 'bar',
+                                    data: {
+                                        labels: chartData.locationDistribution.slice(0, 10).map(d => d.name.substring(0, 20)),
+                                        datasets: [{
+                                            label: '数量',
+                                            data: chartData.locationDistribution.slice(0, 10).map(d => d.value),
+                                            backgroundColor: '#9c27b0'
+                                        }]
+                                    },
+                                    options: { 
+                                        responsive: true,
+                                        indexAxis: 'y',
+                                        plugins: { 
+                                            legend: { display: false },
+                                            zoom: { zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'xy' } }
+                                        },
                                         scales: { x: { beginAtZero: true } }
                                     }
                                 });

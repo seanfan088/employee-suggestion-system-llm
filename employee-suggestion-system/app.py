@@ -1483,6 +1483,7 @@ def chart_data():
         dept_counts = df['Department'].value_counts().head(10).to_dict()
         item_counts = df['ItemType'].value_counts().head(10).to_dict()
         labor_counts = df['LaborType'].value_counts().to_dict()
+        location_counts = df['LocationName'].value_counts().head(10).to_dict()
         
         tfidf_matrix = vectorizer.transform(df['combined_text'])
         similarities = cosine_similarity(tfidf_matrix, tfidf_matrix)
@@ -1501,6 +1502,7 @@ def chart_data():
             'departmentDistribution': [{'name': k, 'value': int(v)} for k, v in dept_counts.items()],
             'itemTypeDistribution': [{'name': k, 'value': int(v)} for k, v in item_counts.items()],
             'laborTypeDistribution': [{'name': k, 'value': int(v)} for k, v in labor_counts.items()],
+            'locationDistribution': [{'name': k, 'value': int(v)} for k, v in location_counts.items()],
             'similarityDistribution': [{'range': f'{bins[i]}-{bins[i+1]}', 'count': int(hist[i])} for i in range(len(hist))],
             'topKeywords': top_keywords[:10]
         })
