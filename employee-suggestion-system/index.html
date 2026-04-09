@@ -72,17 +72,16 @@
             <div class="nav-wrapper">
                 <a class="brand-logo" href="#">
                     <i class="material-icons">record_voice_over</i>
-                    <span style="padding-left:8px;">ESS智能助手</span>
+                    <span style="padding-left:15px;font-size:35px;">ESS智能助手 (ESS Intelligent Assistant)</span>
                 </a>
                 <ul class="navbar-list right">
-                    <li><a href="#" onclick="switchTab('predict')" class="waves-effect waves-light"><i class="material-icons">psychology</i> 智能预测</a></li>
-                    <li><a href="#" onclick="switchTab('train')" class="waves-effect waves-light"><i class="material-icons">model_training</i> 模型训练</a></li>
-                    <li><a href="#" onclick="switchTab('stats')" class="waves-effect waves-light"><i class="material-icons">analytics</i> 数据统计</a></li>
+                    <li><a href="#" onclick="switchTab('preict')" class="waves-effect waves-light"><i class="material-icons">psychology</i><span style="padding-left:0px; font-size:16x; color:#263238">智能预测</span></a></li>
+                    <li><a href="#" onclick="switchTab('train')" class="waves-effect waves-light"><i class="material-icons">model_training</i><span style="padding-left:0px; font-size:16x; color:#263238">模型训练</span></a></li>
+                    <li><a href="#" onclick="switchTab('stats')" class="waves-effect waves-light"><i class="material-icons">analytics</i><span style="padding-left:0px; font-size:16x; color:#263238">数据统计</span></a></li>
                 </ul>
             </div>
         </nav>
     </div>
-
     <div class="row" style="margin-top: 70px;">
         <!-- 左侧用户信息 -->
         <div class="col s12 m12 l3 xl2 offset-xl1">
@@ -97,14 +96,17 @@
                     <li class="collection-item">
                         <i class="material-icons left">business</i>
                         部门: 生产区域
+                        <div>Department:Production Zone</div>
                     </li>
                     <li class="collection-item">
                         <i class="material-icons left">category</i>
-                        建议类型: 上下文语义自动智能分配
+                        <div>建议类型: 上下文语义自动智能分配</div>
+                        <div>Suggestion Type:Context-Aware Semantic Intelligent Routing</div>
                     </li>
                     <li class="collection-item">
                         <i class="material-icons left">model_training</i>
-                        训练数据: 自动学习
+                        训练数据: 自动学习 
+                        <div>Training Data: Automatic Learning</div>
                     </li>
                 </ul>
             </div>
@@ -120,7 +122,7 @@
                             <div class="col s12">
                                 <div class="form-card">
                                     <div class="section-title">
-                                        <i class="material-icons left">edit</i>输入建议信息
+                                        <i class="material-icons left">edit</i>输入建议信息 Input Suggestion Information
                                     </div>
                                     <form id="predictForm">
                                         <div class="row">
@@ -134,7 +136,7 @@
                                             <div class="input-field col s12">
                                                 <i class="material-icons prefix">record_voice_over</i>
                                                 <textarea id="description" class="materialize-textarea" required></textarea>
-                                                <label for="description">问题描述 *(地点Where+对象What/人员Who+时间&频率When+原因分析Why)</label>
+                                                <label for="description">问题描述 Problem Description*(地点Where+对象What/人员Who+时间&频率When+原因分析Why)</label>
                                                 <button type="button" class="btn-floating btn-small red waves-effect waves-light" onclick="startSpeech('description')" style="position: absolute; right: 10px; top: 10px;" title="开始语音输入，再按一次结束">
                                                     <i class="material-icons" id="mic-description">mic</i>
                                                 </button>
@@ -144,7 +146,7 @@
                                             <div class="input-field col s12">
                                                 <i class="material-icons prefix">pan_tool</i>
                                                 <textarea id="suggestion" class="materialize-textarea" required></textarea>
-                                                <label for="suggestion">改善建议 *</label>
+                                                <label for="suggestion">改善建议 Improvement Suggestion *</label>
                                                 <button type="button" class="btn-floating btn-small red waves-effect waves-light" onclick="startSpeech('suggestion')" style="position: absolute; right: 10px; top: 10px;" title="开始语音输入，再按一次结束">
                                                     <i class="material-icons" id="mic-suggestion">mic</i>
                                                 </button>
@@ -153,7 +155,7 @@
                                         <div class="row">
                                             <div class="col s12">
                                                 <div class="section-title" style="margin-bottom: 10px;">
-                                                    <i class="material-icons left">photo_library</i>上传图片 (最多3张)
+                                                    <i class="material-icons left">photo_library</i>上传图片 (最多3张) Upload Images (Up to 3)
                                                 </div>
                                                 <div class="file-field input-field">
                                                     <div class="btn btn-action btn-small">
@@ -171,7 +173,7 @@
                                         <div class="row">
                                             <div class="col s12">
                                                 <button type="submit" class="btn btn-submit waves-effect waves-light">
-                                                    <i class="material-icons left">psychology</i>开始推荐
+                                                    <i class="material-icons left">psychology</i>开始推荐 Start Prediction
                                                 </button>
                                             </div>
                                         </div>
@@ -184,14 +186,14 @@
                             <div class="col s12">
                                 <div class="result-card">
                                     <div class="section-title">
-                                        <i class="material-icons left">assessment</i>推荐结果
-                                        <span class="similarity-badge right" id="similarity-badge">匹配度: 0%</span>
+                                        <i class="material-icons left">assessment</i>推荐结果 Prediction Results
+                                        <span class="similarity-badge right" id="similarity-badge">匹配度: 0% </span>
                                     </div>
                                     <div id="predictResult"></div>
                                     <div id="aiSuggestionSection" style="display:none;">
                                         <hr class="result-divider">
                                         <div class="section-title">
-                                            <i class="material-icons left">auto_awesome</i>AI建议
+                                            <i class="material-icons left">auto_awesome</i>AI建议 AI Suggestions
                                         </div>
                                         <div id="aiSuggestionContent"></div>
                                     </div>
@@ -207,12 +209,12 @@
                 <div class="card">
                     <div class="card-content">
                         <div class="section-title">
-                            <i class="material-icons left">model_training</i>模型训练
+                            <i class="material-icons left">model_training</i>模型训练 Model Training
                         </div>
                         <div class="form-card">
                             <p style="margin-bottom: 20px;">
                                 <i class="material-icons left orange-text">info</i>
-                                点击下方按钮从桌面读取Excel文件，重新训练模型
+                                点击下方按钮从桌面读取Excel文件，重新训练模型 
                             </p>
                             <div class="row">
                                 <div class="col s12">
@@ -226,7 +228,7 @@
                             <div class="row">
                                 <div class="col s12">
                                     <button onclick="trainModel()" class="btn btn-action waves-effect waves-light">
-                                        <i class="material-icons left">refresh</i>读取数据并训练模型
+                                        <i class="material-icons left">refresh</i>读取数据并训练模型 
                                     </button>
                                 </div>
                             </div>
@@ -241,7 +243,7 @@
                 <div class="card">
                     <div class="card-content">
                         <div class="section-title">
-                            <i class="material-icons left">analytics</i>数据统计
+                            <i class="material-icons left">analytics</i>数据统计 Data Statistics
                         </div>
                         <div id="statsContent"></div>
                     </div>
@@ -910,28 +912,28 @@
                     <div class="input-field col s6">
                         <i class="material-icons prefix">storage</i>
                         <input disabled value="${stats.total}" type="text">
-                        <label>总记录数</label>
+                        <label>总记录数 Total Records</label>
                     </div>
                     <div class="input-field col s6">
                         <i class="material-icons prefix">business</i>
                         <input disabled value="${stats.departments.length}" type="text">
-                        <label>部门数</label>
+                        <label>部门数 Departments</label>
                     </div>
                     <div class="input-field col s6">
                         <i class="material-icons prefix">category</i>
                         <input disabled value="${stats.itemTypes.length}" type="text">
-                        <label>建议类型数</label>
+                        <label>建议类型数 Item Types</label>
                     </div>
                     <div class="input-field col s6">
                         <i class="material-icons prefix">people</i>
                         <input disabled value="${stats.laborTypes.length}" type="text">
-                        <label>用工类型数</label>
+                        <label>用工类型数 Labor Types</label>
                     </div>
                 `;
                 html += '</div></div>';
 
                 html += '<div class="form-card" style="margin-top: 20px;">';
-                html += '<div class="section-title"><i class="material-icons left">info</i>指标说明与量化方式</div>';
+                html += '<div class="section-title"><i class="material-icons left">info</i>指标说明与量化方式 Metric Description and Quantification Method</div>';
                 html += '<div class="row">';
                 html += '<div class="col s12 m6 l3"><p><strong>相似度分布</strong><br>表示样本在历史库中找到最近邻记录时的相似度区间分布，范围通常为 0 到 1，越高说明文本越接近历史案例。</p></div>';
                 html += '<div class="col s12 m6 l3"><p><strong>准确率 Accuracy</strong><br>预测正确样本数除以总测试样本数，用来衡量整体预测正确比例。</p></div>';
@@ -947,7 +949,7 @@
                     const modelStats = await modelResponse.json();
                     
                     html += '<div class="form-card" style="margin-top: 20px;">';
-                    html += '<div class="section-title"><i class="material-icons left">model_training</i>模型统计</div>';
+                    html += '<div class="section-title"><i class="material-icons left">model_training</i>模型统计 Model Statistics</div>';
                     html += '<div class="row">';
                     
                     html += `
@@ -1001,7 +1003,7 @@
                     
                     if (modelStats.parameters) {
                         html += '<div class="form-card" style="margin-top: 20px;">';
-                        html += '<div class="section-title"><i class="material-icons left">settings</i>模型参数</div>';
+                        html += '<div class="section-title"><i class="material-icons left">settings</i>模型参数 Model Parameters</div>';
                         html += '<div class="row">';
                         
                         const tfidf = modelStats.parameters.tfidf || {};
@@ -1034,7 +1036,7 @@
 
                         if (Object.keys(ollama).length > 0) {
                             html += '<div class="form-card" style="margin-top: 20px;">';
-                            html += '<div class="section-title"><i class="material-icons left">memory</i>Ollama参数</div>';
+                            html += '<div class="section-title"><i class="material-icons left">memory</i>Ollama参数 Ollama Parameters</div>';
                             html += '<div class="row">';
                             html += `
                                 <div class="input-field col s6">
@@ -1063,7 +1065,7 @@
                         
                         if (Object.keys(w2v).length > 0) {
                             html += '<div class="form-card" style="margin-top: 20px;">';
-                            html += '<div class="section-title"><i class="material-icons left">hub</i>Word2Vec参数</div>';
+                            html += '<div class="section-title"><i class="material-icons left">hub</i>Word2Vec参数 Word2Vec Parameters</div>';
                             html += '<div class="row">';
                             html += `
                                 <div class="input-field col s6">
@@ -1357,7 +1359,7 @@
                     if (evalData && Object.keys(evalData).length > 0 && !evalData.error) {
                         evalHtml += '<div class="form-card" style="margin-top: 20px;">';
                         evalHtml += '<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">';
-                        evalHtml += '<div class="section-title" style="margin-bottom:0;"><i class="material-icons left">assessment</i>模型评估 - 各字段拟合分析</div>';
+                        evalHtml += '<div class="section-title" style="margin-bottom:0;"><i class="material-icons left">assessment</i>模型评估 - 各字段拟合分析 Model Evaluation - Field-wise Fit Analysis</div>';
                         evalHtml += '<button class="btn btn-action waves-effect waves-light" type="button" onclick="reloadEvaluationData()">';
                         evalHtml += '<i class="material-icons left">refresh</i>重新加载评估数据';
                         evalHtml += '</button>';
@@ -1366,12 +1368,12 @@
                         // Create select for field selection
                         evalHtml += '<div class="input-field">';
                         evalHtml += '<select id="evalFieldSelect" onchange="renderEvalCharts()">';
-                        evalHtml += '<option value="" disabled selected>选择预测字段</option>';
+                        evalHtml += '<option value="" disabled selected>选择预测字段 Select Prediction Field</option>';
                         for (const [field, metrics] of Object.entries(evalData)) {
                             evalHtml += `<option value="${field}">${field} (${metrics.uniqueClasses}类)</option>`;
                         }
                         evalHtml += '</select>';
-                        evalHtml += '<label>选择预测字段查看评估指标</label>';
+                        evalHtml += '<label>选择预测字段查看评估指标 Select Prediction Field to View Evaluation Metrics</label>';
                         evalHtml += '</div>';
                         
                         evalHtml += '<div id="evalMetrics"></div>';
