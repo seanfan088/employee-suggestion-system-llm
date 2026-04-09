@@ -1496,7 +1496,7 @@ def chart_data():
         feature_names = vectorizer.get_feature_names_out()
         tfidf_sum = np.asarray(tfidf_matrix.sum(axis=0)).flatten()
         top_indices = tfidf_sum.argsort()[-20:][::-1]
-        top_keywords = [{'word': feature_names[i], 'weight': float(tfidf_sum[i])} for i in top_indices]
+        top_keywords = [{'word': str(feature_names[i]).replace('_x000d_', '').strip(), 'weight': float(tfidf_sum[i])} for i in top_indices]
         
         return jsonify({
             'departmentDistribution': [{'name': k, 'value': int(v)} for k, v in dept_counts.items()],
