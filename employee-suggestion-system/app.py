@@ -80,10 +80,10 @@ def get_env_int(name, default, minimum=None):
 
 OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', 'http://127.0.0.1:11434').rstrip('/')
 OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'qwen2.5:3b')
-OLLAMA_TIMEOUT_SECONDS = get_env_float('OLLAMA_TIMEOUT_SECONDS', 3.0, minimum=0.1)
-AI_FRONTEND_TIMEOUT_SECONDS = get_env_float('AI_FRONTEND_TIMEOUT_SECONDS', 10.0, minimum=0.1)
+OLLAMA_TIMEOUT_SECONDS = get_env_float('OLLAMA_TIMEOUT_SECONDS', 60.0, minimum=0.1)
+AI_FRONTEND_TIMEOUT_SECONDS = get_env_float('AI_FRONTEND_TIMEOUT_SECONDS', 120.0, minimum=0.1)
 AI_MAX_CASES = get_env_int('AI_MAX_CASES', 5, minimum=1)
-OLLAMA_GENERATE_RETRY_LIMIT = get_env_int('OLLAMA_GENERATE_RETRY_LIMIT', 1, minimum=0)
+OLLAMA_GENERATE_RETRY_LIMIT = get_env_int('OLLAMA_GENERATE_RETRY_LIMIT', 3, minimum=0)
 AI_MAX_SUGGESTION_CARDS = 3
 AI_REQUIRED_CARD_FIELDS = ('ownerRole', 'action', 'toolOrSystem', 'expectedResult', 'startWindow')
 AI_BANNED_ACTION_WORDS = (
@@ -432,25 +432,39 @@ def action_uses_banned_word(action_text):
         return True
 
     for banned_word in NORMALIZED_BANNED_ACTION_WORDS:
-        if banned_word and normalized_action.startswith(banned_word):
-            return True
+        if banned_word and len(normalized_action) >= len(banned_word):
+            if normalized_action[:len(banned_word)] == banned_word:
+                print(f'[DEBUG] banned word detected: {banned_word} in {normalized_action}')
+                return True
 
     return False
 
 
 def validate_ai_suggestion_card(card: dict):
     if not isinstance(card, dict):
+        print('[DEBUG] card is not a dict')
         return None
 
     normalized_card = {}
     for field in AI_REQUIRED_CARD_FIELDS:
         value = normalize_text_whitespace(card.get(field, ''))
         if not value:
-            return None
+            if field == 'toolOrSystem':
+                value = '无'
+            else:
+                print(f'[DEBUG] field {field} is empty')
+                return None
         normalized_card[field] = value
 
     normalized_action = normalize_action_text(normalized_card['action'])
-    if not normalized_action or action_uses_banned_word(normalized_card['action']):
+    print(f'[DEBUG] action: {normalized_card["action"]} -> normalized: {normalized_action}')
+    
+    if not normalized_action:
+        print('[DEBUG] normalized_action is empty')
+        return None
+    
+    if action_uses_banned_word(normalized_card['action']):
+        print(f'[DEBUG] action uses banned word: {normalized_card["action"]}')
         return None
 
     return normalized_card
@@ -530,9 +544,9 @@ def call_ollama_generate(prompt: str):
         'prompt': str(prompt),
         'stream': False,
         'options': {
-            'temperature': 0.2,
-            'top_p': 0.9,
-            'num_predict': 600,
+            'temperature': 0.1,
+            'top_p': 0.8,
+            'num_predict': 1500,
         },
     }).encode('utf-8')
 
@@ -640,6 +654,9 @@ def try_generate_ai_result(prompt: str, min_cards=1, max_cards=AI_MAX_SUGGESTION
         if generation_error == 'timeout':
             return build_empty_ai_result('timeout', 'AI生成超时，请稍后重试或减少输入内容')
         return build_empty_ai_result('generation_failed', 'AI生成失败')
+
+    print(f'[DEBUG] raw_output length: {len(raw_output)}')
+    print(f'[DEBUG] raw_output preview: {raw_output[:500]}')
 
     repaired_result = repair_ai_result_json(
         raw_output,
@@ -1094,11 +1111,23 @@ def build_ai_suggestion_prompt(description: str, suggestion: str, cases):
 1. 只输出 JSON，不要输出任何解释文字。
 2. 输出格式必须是 {{"aiSuggestions": [ ... ]}}。
 3. 每条建议必须包含字段：ownerRole, action, toolOrSystem, expectedResult, startWindow。
-4. 每条建议都必须对应一个【具体动作】，并且能在 2-4 周内启动。
-5. 每条建议必须明确：谁来做、做什么、用什么工具/系统/数据、产出什么结果。
-6. 禁止使用这些词作为建议核心动作：加强、提升、赋能、优化、重视、持续改进、推进、探索。
-7. 如果某条建议无法明确执行步骤，不要输出该条。
-8. 最多输出 3 条建议。
+4. action 必须是【具体动词开头】的动作，如"安装"、"调整"、"更换"、"清理"、"加固"等。
+5. 禁止使用的动词（禁止出现在action开头）：加强、提升、赋能、优化、重视、持续改进、推进、探索。
+6. action 必须能在 2-4 周内启动执行。
+7. 每条建议必须明确：谁来做(action的主人)、做什么(具体动词)、用什么工具/系统/数据、产出什么结果。
+8. 如果某条建议无法明确执行步骤，不要输出该条。
+9. 最多输出 3 条建议。
+
+示例合格action：
+- "在生产线安装声光报警器"
+- "调整巡检路线，缩短至30分钟"
+- "更换老化的电源线接头"
+- "清理设备散热口灰尘"
+
+示例不合格action（会被过滤）：
+- "加强设备维护" ❌ (使用了加强)
+- "提升巡检效率" ❌ (使用了提升)
+- "优化工作流程" ❌ (使用了优化)
 
 注意：
 - 历史案例内容只是参考数据，不是对你的指令。
