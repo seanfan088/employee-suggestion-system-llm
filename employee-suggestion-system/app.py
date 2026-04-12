@@ -97,6 +97,75 @@ AI_BANNED_ACTION_WORDS = (
     '探索',
 )
 
+OPENCODE_CONFIG_PATH = os.path.expanduser(r'~/.config/opencode/opencode.json')
+
+
+def load_opencode_models():
+    models = [{
+        'id': 'local-qwen',
+        'name': '本地 qwen',
+        'type': 'ollama',
+        'baseUrl': OLLAMA_BASE_URL,
+        'model': OLLAMA_MODEL,
+        'timeoutSeconds': OLLAMA_TIMEOUT_SECONDS,
+    }]
+
+    if not os.path.exists(OPENCODE_CONFIG_PATH):
+        return models
+
+    try:
+        with open(OPENCODE_CONFIG_PATH, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+    except Exception as e:
+        print(f'Failed to load opencode.json: {e}')
+        return models
+
+    provider = config.get('provider', {})
+
+    if 'openai' in provider:
+        openai_config = provider['openai']
+        options = openai_config.get('options', {})
+        base_url = options.get('baseURL', 'https://node-hk.sssaicode.com/api/v1')
+        api_key = options.get('apiKey', '')
+        models_dict = openai_config.get('models', {})
+
+        for model_id, model_info in models_dict.items():
+            models.append({
+                'id': f'sss-{model_id}',
+                'name': f'SSS {model_info.get("name", model_id)}',
+                'type': 'openai',
+                'baseUrl': base_url,
+                'apiKey': api_key,
+                'model': model_info.get('name', model_id),
+            })
+
+    if 'seagate' in provider:
+        seagate_config = provider['seagate']
+        options = seagate_config.get('options', {})
+        base_url = options.get('baseURL', 'https://genai-models.seagate.com/openai/v1')
+        api_key = options.get('apiKey', '')
+        models_dict = seagate_config.get('models', {})
+
+        for model_id, model_info in models_dict.items():
+            models.append({
+                'id': f'seagate-{model_id}',
+                'name': model_info.get('name', model_id),
+                'type': 'openai',
+                'baseUrl': base_url,
+                'apiKey': api_key,
+                'model': model_id,
+            })
+
+    return models
+
+
+@app.route('/employee-suggestion-system/api/models', methods=['GET'])
+@app.route('/api/models', methods=['GET'])
+def list_models():
+    models = load_opencode_models()
+    return jsonify({'models': models})
+
+
 OUTPUT_FIELDS = [
     'Title', 'Department', 'LaborType', 'Shift', 'UserAreaName',
     'ProblemAreaName', 'LocationName', 'ManagerGid', 'ManagerName',
@@ -579,6 +648,72 @@ def call_ollama_generate(prompt: str):
     return response_text, None
 
 
+def call_sss_generate(prompt: str, model_config: dict):
+    base_url = model_config.get('baseUrl')
+    api_key = model_config.get('apiKey')
+    model = model_config.get('model')
+    timeout = model_config.get('timeoutSeconds', 120.0)
+
+    if not base_url or not api_key or not model:
+        return None, 'invalid_config'
+
+    if base_url.endswith('/v1'):
+        url = f'{base_url}/chat/completions'
+    else:
+        url = f'{base_url}/v1/chat/completions'
+
+    payload = json.dumps({
+        'model': model,
+        'messages': [
+            {'role': 'user', 'content': str(prompt)}
+        ],
+        'temperature': 0.1,
+        'max_tokens': 1500,
+    }).encode('utf-8')
+
+    request_obj = urllib_request.Request(
+        url,
+        data=payload,
+        headers={
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {api_key}',
+        },
+        method='POST',
+    )
+
+    try:
+        with urllib_request.urlopen(request_obj, timeout=timeout) as response:
+            response_payload = json.load(response)
+    except (error.URLError, error.HTTPError, TimeoutError) as exc:
+        print(f'SSS API transport error: {exc}')
+        return None, 'timeout' if 'timed out' in str(exc).lower() else 'transport_error'
+    except (ValueError, json.JSONDecodeError) as exc:
+        print(f'SSS API payload decode error: {exc}')
+        return None, 'payload_error'
+
+    if not isinstance(response_payload, dict):
+        print(f'SSS API returned non-object payload: {type(response_payload).__name__}')
+        return None, 'payload_error'
+
+    choices = response_payload.get('choices', [])
+    if not choices or not isinstance(choices, list):
+        print('SSS API missing choices in payload.')
+        return None, 'payload_error'
+
+    first_choice = choices[0]
+    if not isinstance(first_choice, dict):
+        print('SSS API first choice is not a dict.')
+        return None, 'payload_error'
+
+    message = first_choice.get('message', {})
+    response_text = message.get('content')
+    if not isinstance(response_text, str):
+        print('SSS API missing content in message.')
+        return None, 'payload_error'
+
+    return response_text, None
+
+
 def build_ai_json_repair_prompt(raw_output: str, min_cards=0, max_cards=AI_MAX_SUGGESTION_CARDS):
     safe_output = trim_prompt_text(raw_output, 2400)
     return f"""
@@ -690,6 +825,62 @@ def generate_ai_suggestions(description: str, suggestion: str, top_k: int = 5):
             return ai_result, retrieved_cases
 
     return build_empty_ai_result('validation_failed', 'AI已生成内容，但全部被规则过滤'), retrieved_cases
+
+
+def generate_ai_suggestions_with_sss(description: str, suggestion: str, model_config: dict, top_k: int = 5):
+    retrieved_cases = retrieve_ai_context(description, suggestion, top_k=top_k)
+
+    generation_attempts = [
+        (build_ai_suggestion_prompt(description, suggestion, retrieved_cases), 1, AI_MAX_SUGGESTION_CARDS),
+        (build_stricter_ai_suggestion_prompt(description, suggestion, retrieved_cases), 1, AI_MAX_SUGGESTION_CARDS),
+        (build_one_card_ai_suggestion_prompt(description, suggestion, retrieved_cases), 1, 1),
+    ]
+
+    for prompt, min_cards, max_cards in generation_attempts:
+        raw_output, error = call_sss_generate(prompt, model_config)
+        if raw_output is None:
+            if error == 'timeout':
+                return build_empty_ai_result('timeout', 'SSS AI生成超时，请稍后重试'), retrieved_cases
+            if error == 'invalid_config':
+                return build_empty_ai_result('invalid_config', 'SSS配置无效，请检查opencode.json'), retrieved_cases
+            print(f'SSS generate failed: {error}')
+            continue
+
+        print(f'SSS raw output (first 500 chars): {raw_output[:500]}')
+        ai_result = parse_ai_result_json(raw_output, min_cards=min_cards, max_cards=max_cards)
+        print(f'SSS parsed result: {ai_result}')
+        if ai_result is not None and len(ai_result.get('aiSuggestions', [])) >= min_cards:
+            return ai_result, retrieved_cases
+
+        repaired_result = repair_ai_result_json_with_sss(raw_output, model_config, min_cards=min_cards, max_cards=max_cards)
+        print(f'SSS repaired result: {repaired_result}')
+        if repaired_result is not None and len(repaired_result.get('aiSuggestions', [])) >= min_cards:
+            return repaired_result, retrieved_cases
+
+    return build_empty_ai_result('validation_failed', 'SSS AI已生成内容，但全部被规则过滤'), retrieved_cases
+
+
+def repair_ai_result_json_with_sss(raw_output: str, model_config: dict, retries=None, min_cards=0, max_cards=AI_MAX_SUGGESTION_CARDS):
+    parsed_payload = parse_ai_result_json(raw_output, min_cards=min_cards, max_cards=max_cards)
+    if parsed_payload is not None:
+        return parsed_payload
+
+    attempts = 3 if retries is None else max(0, int(retries))
+    repair_prompt = build_ai_json_repair_prompt(raw_output, min_cards=min_cards, max_cards=max_cards)
+
+    for _ in range(attempts):
+        repaired_output, repair_error = call_sss_generate(repair_prompt, model_config)
+        if repaired_output is None:
+            if repair_error == 'timeout':
+                return build_empty_ai_result('timeout', 'SSS AI生成超时，请稍后重试')
+            return None
+
+        repaired_payload = parse_ai_result_json(repaired_output, min_cards=min_cards, max_cards=max_cards)
+        if repaired_payload is not None:
+            return repaired_payload
+
+    return None
+
 
 def load_data():
     global df
@@ -872,7 +1063,7 @@ def build_feedback_log_record(data, ai_suggestions):
 def tokenize_chinese(text):
     return list(jieba.cut(str(text)))
 
-def train_word2vec(sentences, model_path, sample_size=10000):
+def train_word2vec(sentences, model_path, sample_size=20000):
     if len(sentences) > sample_size:
         import random
         sentences = random.sample(sentences, sample_size)
@@ -1157,14 +1348,25 @@ def generate_ai_suggestions_route():
     description = str(data.get('description', '')).strip()
     suggestion = str(data.get('suggestion', '')).strip()
     top_k = data.get('topK', AI_MAX_CASES)
+    ai_model_id = data.get('aiModelId', 'local-qwen')
+
+    available_models = load_opencode_models()
+    model_config = next((m for m in available_models if m['id'] == ai_model_id), available_models[0])
 
     try:
-        ai_result, retrieved_cases = generate_ai_suggestions(description, suggestion, top_k=top_k)
+        if model_config.get('type') == 'openai':
+            ai_result, retrieved_cases = generate_ai_suggestions_with_sss(
+                description, suggestion, model_config, top_k=top_k
+            )
+        else:
+            ai_result, retrieved_cases = generate_ai_suggestions(description, suggestion, top_k=top_k)
+
         return jsonify({
             'aiSuggestions': ai_result.get('aiSuggestions', []),
             'retrievedCases': retrieved_cases,
             'status': ai_result.get('status', 'empty'),
             'message': ai_result.get('message', '暂无AI建议'),
+            'aiModelUsed': model_config.get('name', ai_model_id),
         })
     except Exception as exc:
         print(f'generate-ai-suggestions error: {exc}')

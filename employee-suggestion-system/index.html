@@ -75,7 +75,7 @@
                     <span style="padding-left:15px;font-size:35px;">ESS智能助手 (ESS Intelligent Assistant)</span>
                 </a>
                 <ul class="navbar-list right">
-                    <li><a href="#" onclick="switchTab('preict')" class="waves-effect waves-light"><i class="material-icons">psychology</i><span style="padding-left:0px; font-size:16x; color:#263238">智能预测</span></a></li>
+                    <li><a href="#" onclick="switchTab('predict')" class="waves-effect waves-light"><i class="material-icons">psychology</i><span style="padding-left:0px; font-size:16x; color:#263238">智能预测</span></a></li>
                     <li><a href="#" onclick="switchTab('train')" class="waves-effect waves-light"><i class="material-icons">model_training</i><span style="padding-left:0px; font-size:16x; color:#263238">模型训练</span></a></li>
                     <li><a href="#" onclick="switchTab('stats')" class="waves-effect waves-light"><i class="material-icons">analytics</i><span style="padding-left:0px; font-size:16x; color:#263238">数据统计</span></a></li>
                 </ul>
@@ -244,6 +244,15 @@
                     <div class="card-content">
                         <div class="section-title">
                             <i class="material-icons left">analytics</i>数据统计 Data Statistics
+                        </div>
+                        <div class="row" style="margin-bottom: 16px;">
+                            <div class="input-field col s6">
+                                <i class="material-icons prefix">psychology</i>
+                                <select id="aiModelSelect">
+                                    <option value="local-qwen" selected>本地 qwen</option>
+                                </select>
+                                <label for="aiModelSelect">AI模型 AI Model</label>
+                            </div>
                         </div>
                         <div id="statsContent"></div>
                     </div>
@@ -437,19 +446,44 @@
             currentAiSuggestions = [];
         }
 
-        async function loadAiSuggestions(description, suggestion, requestId) {
-            renderAiSuggestionState('loading');
+        let availableAiModels = [];
 
-            try {
-                const response = await fetch('/api/generate-ai-suggestions', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        description: description,
-                        suggestion: suggestion,
-                        requestId: requestId
-                    })
-                });
+            async function loadAiModels() {
+                try {
+                    const response = await fetch('/api/models');
+                    const result = await response.json();
+                    availableAiModels = result.models || [];
+                    const select = document.getElementById('aiModelSelect');
+                    if (select && availableAiModels.length > 0) {
+                        select.innerHTML = '';
+                        availableAiModels.forEach(model => {
+                            const option = document.createElement('option');
+                            option.value = model.id;
+                            option.textContent = model.name;
+                            select.appendChild(option);
+                        });
+                        M.FormSelect.init(select);
+                    }
+                } catch (err) {
+                    console.error('Failed to load AI models:', err);
+                }
+            }
+
+            async function loadAiSuggestions(description, suggestion, requestId) {
+                renderAiSuggestionState('loading');
+                const aiModelId = document.getElementById('aiModelSelect')?.value || 'local-qwen';
+
+                try {
+                    const response = await fetch('/api/generate-ai-suggestions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            description: description,
+                            suggestion: suggestion,
+                            requestId: requestId,
+                            aiModelId: aiModelId
+                        })
+                    });
 
                 const result = await response.json();
 
@@ -472,6 +506,18 @@
                 }
 
                 renderAiSuggestionCards(result.aiSuggestions || []);
+                if (result.aiModelUsed) {
+                    const aiSuggestionElements = getAiSuggestionElements();
+                    const modelBadge = document.createElement('span');
+                    modelBadge.className = 'new badge blue';
+                    modelBadge.setAttribute('data-badge-caption', '');
+                    modelBadge.textContent = result.aiModelUsed;
+                    modelBadge.style.marginLeft = '8px';
+                    const header = aiSuggestionElements.section.querySelector('h5, .section-title');
+                    if (header) {
+                        header.appendChild(modelBadge);
+                    }
+                }
             } catch (err) {
                 if (requestId !== currentAiRequestId) {
                     return;
@@ -490,6 +536,7 @@
         }
 
         loadFieldOptions();
+        loadAiModels();
 
         let uploadedImages = [];
 
@@ -688,9 +735,18 @@
                 page.style.display = 'block';
             }
             
+            // Initialize Materialize components after showing page
+            if (tabId === 'predict') {
+                M.updateTextFields();
+                var selects = page.querySelectorAll('select');
+                selects.forEach(function(s) { M.FormSelect.init(s); });
+            }
+            
             // Load stats data if stats tab
             if (tabId === 'stats') {
                 loadStats();
+                var statsSelects = document.getElementById('stats-page').querySelectorAll('select');
+                statsSelects.forEach(function(s) { M.FormSelect.init(s); });
             }
         }
 
