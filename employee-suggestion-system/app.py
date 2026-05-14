@@ -1063,7 +1063,7 @@ def build_feedback_log_record(data, ai_suggestions):
 def tokenize_chinese(text):
     return list(jieba.cut(str(text)))
 
-def train_word2vec(sentences, model_path, sample_size=20000):
+def train_word2vec(sentences, model_path, sample_size=30000):
     if len(sentences) > sample_size:
         import random
         sentences = random.sample(sentences, sample_size)
