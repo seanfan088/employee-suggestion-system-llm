@@ -2,8 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_curve, auc, confusion_matrix, classification_report
-from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from sklearn.model_selection import train_test_split
 from gensim.models import Word2Vec
 import jieba
@@ -15,6 +14,7 @@ import shutil
 from urllib import error, request as urllib_request
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from db import get_session, Suggestion, AiFeedback, PredictionLog, init_db
 
 app = Flask(__name__)
 CORS(app)
@@ -388,6 +388,7 @@ def bootstrap_runtime_state():
 
 
 def start_app_server():
+    init_db()
     bootstrap_runtime_state()
 
     if not load_model():
@@ -884,32 +885,83 @@ def repair_ai_result_json_with_sss(raw_output: str, model_config: dict, retries=
 
 def load_data():
     global df
-    df = pd.read_excel(EXCEL_PATH, engine='openpyxl')
+    db_session = get_session()
+    records = db_session.query(Suggestion).all()
+    db_session.close()
+
+    if not records:
+        df = pd.DataFrame()
+        return df
+
+    rows = []
+    for r in records:
+        rows.append({
+            'SN': r.sn or '',
+            'Gid': r.gid or '',
+            'Name': r.name or '',
+            'Title': r.title or '',
+            'Department': r.department or '',
+            'Tel': r.tel or '',
+            'LaborType': r.labor_type or '',
+            'Shift': r.shift or '',
+            'UserAreaName': r.user_area_name or '',
+            'ProblemAreaName': r.problem_area_name or '',
+            'LocationName': r.location_name or '',
+            'ManagerGid': r.manager_gid or '',
+            'ManagerName': r.manager_name or '',
+            'SubmissionDate': r.submission_date or '',
+            'Description': r.description or '',
+            'Suggestion': r.suggestion or '',
+            'ReplyOpinion': r.reply_opinion or '',
+            'RejectJustification': r.reject_justification or '',
+            'Status': r.status or '',
+            'ItemType': r.item_type or '',
+            'GoodRequest': r.good_request or '',
+            'OwnerGid': r.owner_gid or '',
+            'OwnerName': r.owner_name or '',
+            'OwnerTel': r.owner_tel or '',
+            'OwnerManagerGid': r.owner_manager_gid or '',
+            'OwnerManagerName': r.owner_manager_name or '',
+            'Score': r.score or 0,
+            'IsRepeat': r.is_repeat or '',
+            'AreaType': r.area_type or '',
+        })
+
+    df = pd.DataFrame(rows)
     df = df.fillna('')
     df = append_accepted_feedback_rows(df)
     return df
 
 
 def load_committed_feedback_records():
-    records = []
-    if not os.path.exists(FEEDBACK_LOG_PATH):
-        return records
+    db_session = get_session()
+    try:
+        records = db_session.query(AiFeedback).filter(
+            AiFeedback.status == 'committed'
+        ).all()
 
-    with open(FEEDBACK_LOG_PATH, 'r', encoding='utf-8') as feedback_file:
-        for line in feedback_file:
-            raw_line = line.strip()
-            if not raw_line:
-                continue
-
-            try:
-                record = json.loads(raw_line)
-            except json.JSONDecodeError:
-                continue
-
-            if record.get('status') == 'committed':
-                records.append(record)
-
-    return records
+        result = []
+        for r in records:
+            result.append({
+                'submissionId': r.submission_id or '',
+                'status': r.status or '',
+                'retryKey': r.retry_key or '',
+                'gid': r.gid or '',
+                'description': r.description or '',
+                'suggestion': r.suggestion or '',
+                'replyOpinion': r.reply_opinion or '',
+                'predictedFields': r.predicted_fields or {},
+                'retrievedCases': r.retrieved_cases or [],
+                'generatedAiSuggestions': r.generated_ai_suggestions or [],
+                'acceptedSuggestionIds': r.accepted_suggestion_ids or [],
+                'editedAiSuggestions': r.edited_ai_suggestions or [],
+                'discardedSuggestionIds': r.discarded_suggestion_ids or [],
+                'images': r.images or [],
+                'submittedAt': r.submitted_at or '',
+            })
+        return result
+    finally:
+        db_session.close()
 
 
 def build_feedback_reply_opinion(record):
@@ -970,25 +1022,60 @@ def append_accepted_feedback_rows(base_df):
 
 
 def append_feedback_log_record(record):
-    with open(FEEDBACK_LOG_PATH, 'a', encoding='utf-8') as feedback_file:
-        feedback_file.write(json.dumps(record, ensure_ascii=False) + '\n')
+    db_session = get_session()
+    try:
+        feedback = AiFeedback(
+            submission_id=record.get('submissionId', ''),
+            status=record.get('status', 'committed'),
+            retry_key=record.get('retryKey', ''),
+            gid=record.get('gid', ''),
+            description=record.get('description', ''),
+            suggestion=record.get('suggestion', ''),
+            reply_opinion=record.get('replyOpinion', ''),
+            predicted_fields=record.get('predictedFields'),
+            retrieved_cases=record.get('retrievedCases'),
+            generated_ai_suggestions=record.get('generatedAiSuggestions'),
+            accepted_suggestion_ids=record.get('acceptedSuggestionIds'),
+            edited_ai_suggestions=record.get('editedAiSuggestions'),
+            discarded_suggestion_ids=record.get('discardedSuggestionIds'),
+            images=record.get('images'),
+            submitted_at=record.get('submittedAt', ''),
+        )
+        db_session.add(feedback)
+        db_session.commit()
+    except Exception as e:
+        db_session.rollback()
+        print(f'Failed to save feedback: {e}')
+    finally:
+        db_session.close()
 
 
 def append_prediction_log_record(record):
-    with open(PREDICTION_LOG_PATH, 'a', encoding='utf-8') as prediction_file:
-        prediction_file.write(json.dumps(record, ensure_ascii=False) + '\n')
+    db_session = get_session()
+    try:
+        log = PredictionLog(
+            gid=record.get('gid', ''),
+            description_length=record.get('descriptionLength'),
+            suggestion_length=record.get('suggestionLength'),
+            similarity=record.get('similarity'),
+            predicted_fields=record.get('predictedFields', record),
+            predicted_at=record.get('predictedAt', ''),
+        )
+        db_session.add(log)
+        db_session.commit()
+    except Exception as e:
+        db_session.rollback()
+        print(f'Failed to save prediction log: {e}')
+    finally:
+        db_session.close()
 
 
 def count_prediction_results():
-    if not os.path.exists(PREDICTION_LOG_PATH):
-        return 0
-
-    total = 0
-    with open(PREDICTION_LOG_PATH, 'r', encoding='utf-8') as prediction_file:
-        for line in prediction_file:
-            if line.strip():
-                total += 1
-    return total
+    db_session = get_session()
+    try:
+        return db_session.query(PredictionLog).count()
+    finally:
+        db_session.close()
 
 
 def calculate_ai_feedback_metrics():
@@ -1496,7 +1583,7 @@ def field_options():
 def submit_data():
     global vectorizer, df
     data = request.json
-    
+
     try:
         if df is None:
             load_data()
@@ -1504,45 +1591,49 @@ def submit_data():
         predicted_fields = data.get('predictedFields', {})
         ai_suggestions = sanitize_submitted_ai_suggestions(data.get('aiSuggestions', []))
         feedback_record = build_feedback_log_record(data, ai_suggestions)
-        
-        new_row = {
-            'SN': f'FY25Q3{len(df)+1:05d}',
-            'Gid': data.get('gid', ''),
-            'Name': data.get('Name', ''),
-            'Title': predicted_fields.get('Title', data.get('Title', '')),
-            'Department': predicted_fields.get('Department', data.get('Department', '')),
-            'Tel': data.get('Tel', ''),
-            'LaborType': predicted_fields.get('LaborType', data.get('LaborType', '')),
-            'Shift': predicted_fields.get('Shift', data.get('Shift', '')),
-            'UserAreaName': predicted_fields.get('UserAreaName', data.get('UserAreaName', '')),
-            'ProblemAreaName': predicted_fields.get('ProblemAreaName', data.get('ProblemAreaName', '')),
-            'LocationName': predicted_fields.get('LocationName', data.get('LocationName', '')),
-            'ManagerGid': predicted_fields.get('ManagerGid', data.get('ManagerGid', '')),
-            'ManagerName': predicted_fields.get('ManagerName', data.get('ManagerName', '')),
-            'SubmissionDate': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M'),
-            'Description': data.get('description', ''),
-            'Suggestion': data.get('suggestion', ''),
-            'Status': 'Submitted',
-            'ItemType': predicted_fields.get('ItemType', data.get('ItemType', '')),
-            'OwnerName': predicted_fields.get('OwnerName', data.get('OwnerName', '')),
-            'OwnerGid': predicted_fields.get('OwnerGid', data.get('OwnerGid', '')),
-            'OwnerTel': predicted_fields.get('OwnerTel', data.get('OwnerTel', '')),
-            'OwnerManagerGid': predicted_fields.get('OwnerManagerGid', data.get('OwnerManagerGid', '')),
-            'OwnerManagerName': predicted_fields.get('OwnerManagerName', data.get('OwnerManagerName', '')),
-            'IsRepeat': predicted_fields.get('IsRepeat', data.get('IsRepeat', '')),
-            'AreaType': predicted_fields.get('AreaType', data.get('AreaType', '')),
-            'ReplyOpinion': feedback_record.get('replyOpinion', ''),
-        }
-        
-        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-        
-        df.to_excel(EXCEL_PATH, index=False)
+
+        db_session = get_session()
+        try:
+            suggestion = Suggestion(
+                sn=f'FY25Q3{len(df)+1:05d}',
+                gid=data.get('gid', ''),
+                name=data.get('Name', ''),
+                title=predicted_fields.get('Title', data.get('Title', '')),
+                department=predicted_fields.get('Department', data.get('Department', '')),
+                tel=data.get('Tel', ''),
+                labor_type=predicted_fields.get('LaborType', data.get('LaborType', '')),
+                shift=predicted_fields.get('Shift', data.get('Shift', '')),
+                user_area_name=predicted_fields.get('UserAreaName', data.get('UserAreaName', '')),
+                problem_area_name=predicted_fields.get('ProblemAreaName', data.get('ProblemAreaName', '')),
+                location_name=predicted_fields.get('LocationName', data.get('LocationName', '')),
+                manager_gid=predicted_fields.get('ManagerGid', data.get('ManagerGid', '')),
+                manager_name=predicted_fields.get('ManagerName', data.get('ManagerName', '')),
+                submission_date=pd.Timestamp.now().strftime('%Y-%m-%d %H:%M'),
+                description=data.get('description', ''),
+                suggestion=data.get('suggestion', ''),
+                status='Submitted',
+                item_type=predicted_fields.get('ItemType', data.get('ItemType', '')),
+                owner_name=predicted_fields.get('OwnerName', data.get('OwnerName', '')),
+                owner_gid=predicted_fields.get('OwnerGid', data.get('OwnerGid', '')),
+                owner_tel=predicted_fields.get('OwnerTel', data.get('OwnerTel', '')),
+                owner_manager_gid=predicted_fields.get('OwnerManagerGid', data.get('OwnerManagerGid', '')),
+                owner_manager_name=predicted_fields.get('OwnerManagerName', data.get('OwnerManagerName', '')),
+                is_repeat=predicted_fields.get('IsRepeat', data.get('IsRepeat', '')),
+                area_type=predicted_fields.get('AreaType', data.get('AreaType', '')),
+                reply_opinion=feedback_record.get('replyOpinion', ''),
+            )
+            db_session.add(suggestion)
+            db_session.commit()
+        finally:
+            db_session.close()
+
         append_feedback_log_record(feedback_record)
-        
+
+        load_data()
         train_model()
-        
+
         model_stats = calculate_model_stats()
-        
+
         return jsonify({'success': True, 'message': '数据已保存并重新训练模型', 'modelStats': model_stats})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
